@@ -1,0 +1,88 @@
+Create a complete trading automation system with these components:
+
+PART 1: Python Telegram Listener on Replit
+- Listens to Telegram channels using python-telegram-bot
+- Parses forex signals in this format:
+  🚀AUDCAD - BUY🚀
+  Entry: 0.91169
+  Stopp-Loss: 0.90869
+  Take-Profit 1: 0.91369
+  Take-Profit 2: 0.91569
+  Take-Profit 3: 0.91769
+
+PART 2: Signal Processing & Forwarding
+Option A: Using cTrader Open API (DIRECT - NO cBot needed)
+- Replit sends signals directly to cTrader using cTrader Open API
+- Uses OAuth2 authentication
+- Places market orders with SL/TP
+- Checks account status and risk
+
+Option B: Using cTrader cBot with Signal Bridge
+- Replit sends signals to a signal bridge service
+- cBot polls the bridge every 2-5 seconds
+- cBot executes trades when new signals arrive
+
+FILES TO CREATE:
+
+For Replit (Option A - Direct API):
+1. main.py - Telegram listener + cTrader API integration
+2. telegram_handler.py - Telegram message handling
+3. ctrader_api_client.py - REAL cTrader Open API client with:
+   - authenticate() - OAuth2 flow
+   - place_market_order() - Execute trades
+   - get_account_info() - Check balance
+   - manage_positions() - Monitor trades
+4. signal_parser.py - Parse Telegram signals
+5. risk_manager.py - Risk calculation (2% max per trade)
+6. requirements.txt - python-telegram-bot, requests, oauthlib
+
+For cTrader cBot (Option B - cBot polling):
+1. SignalReceiverBot.cs - cBot that polls for signals
+2. SignalService.cs - Reads from external source
+3. TradeManager.cs - Executes trades
+4. Settings - Polling interval, risk management
+
+IMPLEMENTATION DETAILS:
+
+For DIRECT API (Option A):
+- Use cTrader Open API endpoints:
+  POST https://api.ctrader.com/oauth2/token
+  POST https://api.ctrader.com/api/v1/accounts/{accountId}/orders
+- Implement OAuth2 client credentials flow
+- Handle token refresh automatically
+- Include all required headers (Authorization, Client-Id, etc.)
+
+For cBot POLLING (Option B):
+- cBot reads from external source every 5 seconds:
+  Source options:
+  1. Local JSON file (shared via cloud sync)
+  2. REST API endpoint
+  3. Google Sheets
+  4. Database
+- Signal format in JSON:
+  {
+    "id": "unique_id",
+    "symbol": "AUDCAD",
+    "direction": "BUY",
+    "entry": 0.91169,
+    "stop_loss": 0.90869,
+    "take_profits": [0.91369, 0.91569, 0.91769],
+    "timestamp": "2024-01-15T10:30:00Z",
+    "status": "pending"
+  }
+
+SECURITY:
+- API keys stored in Replit Secrets
+- OAuth2 tokens with refresh
+- Input validation
+- Rate limiting
+
+ENVIRONMENT VARIABLES:
+- TELEGRAM_BOT_TOKEN
+- TELEGRAM_CHANNEL_IDS
+- CTRADER_CLIENT_ID
+- CTRADER_CLIENT_SECRET
+- CTRADER_ACCOUNT_ID
+- CTRADER_ACCESS_TOKEN (initial)
+
+Create complete working code for Option A (Direct API) as it's the cleanest solution.
