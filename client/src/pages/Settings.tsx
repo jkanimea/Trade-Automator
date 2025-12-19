@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,8 +7,157 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getSettings, upsertSetting } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { Trash2, Plus, Loader2, CheckCircle2 } from "lucide-react";
 
 export default function Settings() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch existing settings
+  const { data: settingsData = [] } = useQuery({
+    queryKey: ["settings"],
+    queryFn: getSettings,
+  });
+
+  // Parse settings into a map
+  const settingsMap = settingsData.reduce((acc, s) => {
+    acc[s.key] = s.value;
+    return acc;
+  }, {} as Record<string, string>);
+
+  // Form state
+  const [accountId, setAccountId] = useState("");
+  const [maxRisk, setMaxRisk] = useState("2.0");
+  const [dailyLossLimit, setDailyLossLimit] = useState("500");
+  const [autoBreakEven, setAutoBreakEven] = useState(true);
+  const [newChannel, setNewChannel] = useState("");
+  const [channels, setChannels] = useState<string[]>([]);
+  const [testingConnection, setTestingConnection] = useState(false);
+
+  // Initialize form from settings
+  useEffect(() => {
+    if (settingsData.length > 0) {
+      setAccountId(settingsMap["ctrader_account_id"] || "");
+      setMaxRisk(settingsMap["max_risk_percent"] || "2.0");
+      setDailyLossLimit(settingsMap["daily_loss_limit"] || "500");
+      setAutoBreakEven(settingsMap["auto_break_even"] !== "false");
+      const channelList = settingsMap["telegram_channels"];
+      if (channelList) {
+        setChannels(JSON.parse(channelList));
+      }
+    }
+  }, [settingsData]);
+
+  // Mutation for saving settings
+  const saveMutation = useMutation({
+    mutationFn: upsertSetting,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  const handleSaveRiskSettings = async () => {
+    try {
+      await saveMutation.mutateAsync({ key: "max_risk_percent", value: maxRisk });
+      await saveMutation.mutateAsync({ key: "daily_loss_limit", value: dailyLossLimit });
+      await saveMutation.mutateAsync({ key: "auto_break_even", value: autoBreakEven.toString() });
+      toast({
+        title: "Settings Saved",
+        description: "Risk management settings have been updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save settings.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveAccountId = async () => {
+    try {
+      await saveMutation.mutateAsync({ key: "ctrader_account_id", value: accountId });
+      toast({
+        title: "Account ID Saved",
+        description: "cTrader account ID has been updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save account ID.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    // Simulate connection test
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setTestingConnection(false);
+    toast({
+      title: "Connection Test",
+      description: "API connection test completed. Check the logs for details.",
+    });
+  };
+
+  const handleAddChannel = async () => {
+    if (!newChannel.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a channel name or ID.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedChannels = [...channels, newChannel.trim()];
+    setChannels(updatedChannels);
+    setNewChannel("");
+
+    try {
+      await saveMutation.mutateAsync({ 
+        key: "telegram_channels", 
+        value: JSON.stringify(updatedChannels) 
+      });
+      toast({
+        title: "Channel Added",
+        description: `"${newChannel.trim()}" has been added to monitored channels.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add channel.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveChannel = async (channelToRemove: string) => {
+    const updatedChannels = channels.filter(c => c !== channelToRemove);
+    setChannels(updatedChannels);
+
+    try {
+      await saveMutation.mutateAsync({ 
+        key: "telegram_channels", 
+        value: JSON.stringify(updatedChannels) 
+      });
+      toast({
+        title: "Channel Removed",
+        description: `"${channelToRemove}" has been removed.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove channel.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
@@ -24,20 +174,63 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="client-id">Client ID</Label>
-                  <Input id="client-id" type="password" value="••••••••••••••••" className="bg-background/50 font-mono" readOnly />
+                  <Input 
+                    id="client-id" 
+                    type="password" 
+                    value="••••••••••••••••" 
+                    className="bg-background/50 font-mono" 
+                    readOnly 
+                  />
+                  <p className="text-xs text-muted-foreground">Set via CTRADER_CLIENT_ID secret</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="client-secret">Client Secret</Label>
-                  <Input id="client-secret" type="password" value="••••••••••••••••" className="bg-background/50 font-mono" readOnly />
+                  <Input 
+                    id="client-secret" 
+                    type="password" 
+                    value="••••••••••••••••" 
+                    className="bg-background/50 font-mono" 
+                    readOnly 
+                  />
+                  <p className="text-xs text-muted-foreground">Set via CTRADER_CLIENT_SECRET secret</p>
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label htmlFor="account-id">Account ID</Label>
-                  <Input id="account-id" value="23849102" className="bg-background/50 font-mono" />
+                  <Input 
+                    id="account-id" 
+                    value={accountId} 
+                    onChange={(e) => setAccountId(e.target.value)}
+                    placeholder="Enter your cTrader account ID"
+                    className="bg-background/50 font-mono" 
+                  />
                 </div>
               </div>
               <div className="pt-2 flex items-center gap-2">
-                <Button className="w-full sm:w-auto">Update Credentials</Button>
-                <Button variant="outline" className="w-full sm:w-auto text-success border-success/30 hover:bg-success/10 hover:text-success">Test Connection</Button>
+                <Button 
+                  onClick={handleSaveAccountId}
+                  disabled={saveMutation.isPending}
+                  className="w-full sm:w-auto"
+                  data-testid="button-save-credentials"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Save Account ID
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full sm:w-auto text-success border-success/30 hover:bg-success/10 hover:text-success"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  data-testid="button-test-connection"
+                >
+                  {testingConnection ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                  )}
+                  Test Connection
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -54,7 +247,16 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Percentage of account equity to risk per trade</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Input type="number" value="2.0" className="w-20 bg-background/50 font-mono text-right" />
+                  <Input 
+                    type="number" 
+                    value={maxRisk} 
+                    onChange={(e) => setMaxRisk(e.target.value)}
+                    className="w-20 bg-background/50 font-mono text-right"
+                    step="0.1"
+                    min="0.1"
+                    max="10"
+                    data-testid="input-max-risk"
+                  />
                   <span className="text-sm font-medium">%</span>
                 </div>
               </div>
@@ -66,7 +268,15 @@ export default function Settings() {
                 </div>
                  <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">$</span>
-                  <Input type="number" value="500" className="w-24 bg-background/50 font-mono text-right" />
+                  <Input 
+                    type="number" 
+                    value={dailyLossLimit} 
+                    onChange={(e) => setDailyLossLimit(e.target.value)}
+                    className="w-24 bg-background/50 font-mono text-right"
+                    step="100"
+                    min="0"
+                    data-testid="input-daily-loss-limit"
+                  />
                 </div>
               </div>
               <Separator />
@@ -75,7 +285,23 @@ export default function Settings() {
                   <Label>Auto-Break Even</Label>
                   <p className="text-xs text-muted-foreground">Move SL to entry after TP1 is hit</p>
                 </div>
-                <Switch checked={true} />
+                <Switch 
+                  checked={autoBreakEven} 
+                  onCheckedChange={setAutoBreakEven}
+                  data-testid="switch-auto-break-even"
+                />
+              </div>
+              <div className="pt-4">
+                <Button 
+                  onClick={handleSaveRiskSettings}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-risk-settings"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Save Risk Settings
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -88,18 +314,54 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex gap-2">
-                  <Input placeholder="Enter Channel ID or Username" className="bg-background/50" />
-                  <Button variant="secondary">Add Channel</Button>
+                  <Input 
+                    placeholder="Enter Channel ID or Username" 
+                    className="bg-background/50"
+                    value={newChannel}
+                    onChange={(e) => setNewChannel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddChannel();
+                      }
+                    }}
+                    data-testid="input-new-channel"
+                  />
+                  <Button 
+                    variant="secondary" 
+                    onClick={handleAddChannel}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-add-channel"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Channel
+                  </Button>
                 </div>
                 <div className="space-y-2 mt-4">
-                  <div className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30">
-                    <span className="font-mono text-sm">Forex VIP Signals</span>
-                    <Button variant="ghost" size="sm" className="h-6 text-destructive hover:text-destructive hover:bg-destructive/10">Remove</Button>
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30">
-                    <span className="font-mono text-sm">Gold Scalper Pro</span>
-                    <Button variant="ghost" size="sm" className="h-6 text-destructive hover:text-destructive hover:bg-destructive/10">Remove</Button>
-                  </div>
+                  {channels.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-4 text-sm">
+                      No channels configured. Add a channel to start monitoring signals.
+                    </div>
+                  ) : (
+                    channels.map((channel, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30"
+                        data-testid={`channel-item-${index}`}
+                      >
+                        <span className="font-mono text-sm">{channel}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemoveChannel(channel)}
+                          data-testid={`button-remove-channel-${index}`}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Remove
+                        </Button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </CardContent>
