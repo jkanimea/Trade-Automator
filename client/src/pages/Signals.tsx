@@ -2,18 +2,32 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockSignals } from "@/lib/mockData";
 import { CheckCircle2, Clock, XCircle, ArrowRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getSignals } from "@/lib/api";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export default function Signals() {
+  useWebSocket();
+  
+  const { data: signals = [], isLoading } = useQuery({
+    queryKey: ["signals"],
+    queryFn: getSignals,
+  });
+
   return (
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title="Signal History" />
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-4">
-            {mockSignals.map((signal) => (
+          {isLoading ? (
+            <div className="text-center text-muted-foreground py-8">Loading signals...</div>
+          ) : signals.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No signals yet</div>
+          ) : (
+            <div className="space-y-4">
+              {signals.map((signal) => (
               <Card key={signal.id} className="bg-card/50 backdrop-blur-sm border-border hover:border-primary/50 transition-colors">
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -71,24 +85,8 @@ export default function Signals() {
                 </CardContent>
               </Card>
             ))}
-            
-            {/* Adding more dummy signals for UI population */}
-            {[1, 2, 3, 4].map((i) => (
-               <Card key={`dummy-${i}`} className="bg-card/50 backdrop-blur-sm border-border opacity-60">
-                <CardContent className="p-6">
-                   <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                          <Clock className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <div className="h-4 w-32 bg-muted rounded animate-pulse" />
-                      </div>
-                      <div className="h-6 w-20 bg-muted rounded animate-pulse" />
-                   </div>
-                </CardContent>
-               </Card>
-            ))}
-          </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

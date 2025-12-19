@@ -1,12 +1,21 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockTrades } from "@/lib/mockData";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { getTrades } from "@/lib/api";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export default function Trades() {
+  useWebSocket();
+  
+  const { data: trades = [], isLoading } = useQuery({
+    queryKey: ["activeTrades"],
+    queryFn: () => getTrades(true),
+  });
+
   return (
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
@@ -22,24 +31,29 @@ export default function Trades() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="relative w-full overflow-auto">
-                <table className="w-full caption-bottom text-sm">
-                  <thead className="[&_tr]:border-b">
-                    <tr className="border-b border-border transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Symbol</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Ticket</th>
-                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Type</th>
-                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Volume</th>
-                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Entry</th>
-                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Current</th>
-                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">SL</th>
-                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">TP</th>
-                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Profit</th>
-                      <th className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="[&_tr:last-child]:border-0">
-                    {mockTrades.map((trade) => (
+              {isLoading ? (
+                <div className="text-center text-muted-foreground py-8">Loading trades...</div>
+              ) : trades.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">No active trades</div>
+              ) : (
+                <div className="relative w-full overflow-auto">
+                  <table className="w-full caption-bottom text-sm">
+                    <thead className="[&_tr]:border-b">
+                      <tr className="border-b border-border transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Symbol</th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Ticket</th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Type</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Volume</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Entry</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Current</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">SL</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">TP</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Profit</th>
+                        <th className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="[&_tr:last-child]:border-0">
+                      {trades.map((trade) => (
                       <tr key={trade.id} className="border-b border-border transition-colors hover:bg-muted/50">
                         <td className="p-4 align-middle font-mono font-bold">{trade.symbol}</td>
                         <td className="p-4 align-middle font-mono text-xs text-muted-foreground">#{trade.ticketId}</td>
@@ -62,10 +76,11 @@ export default function Trades() {
                           </Button>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </main>

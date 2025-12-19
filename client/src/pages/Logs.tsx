@@ -1,9 +1,19 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { systemLogs } from "@/lib/mockData";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useQuery } from "@tanstack/react-query";
+import { getSystemLogs } from "@/lib/api";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export default function Logs() {
+  useWebSocket();
+  
+  const { data: logs = [] } = useQuery({
+    queryKey: ["logs"],
+    queryFn: () => getSystemLogs(50),
+    refetchInterval: 2000,
+  });
+
   return (
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
@@ -21,24 +31,23 @@ export default function Logs() {
             </div>
             <ScrollArea className="flex-1">
               <div className="space-y-1">
-                {systemLogs.map((log, i) => (
-                  <div key={i} className="flex gap-3 hover:bg-white/5 py-0.5 px-2 rounded">
-                    <span className="text-muted-foreground opacity-50 shrink-0">[{log.time}]</span>
-                    <span className={`shrink-0 w-16 ${
-                      log.level === 'INFO' ? 'text-blue-400' :
-                      log.level === 'SUCCESS' ? 'text-green-400' : 'text-yellow-400'
-                    }`}>{log.level}</span>
-                    <span className="text-foreground/90">{log.message}</span>
+                {logs.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    No logs available
                   </div>
-                ))}
-                {/* Simulated extra logs */}
-                {Array.from({length: 20}).map((_, i) => (
-                   <div key={`extra-${i}`} className="flex gap-3 hover:bg-white/5 py-0.5 px-2 rounded opacity-40">
-                    <span className="text-muted-foreground opacity-50 shrink-0">[10:{29 - i}:00]</span>
-                    <span className="text-blue-400 shrink-0 w-16">DEBUG</span>
-                    <span className="text-foreground/90">Heartbeat check: Connection stable. Latency: {12 + i}ms</span>
-                  </div>
-                ))}
+                ) : (
+                  logs.map((log, i) => (
+                    <div key={i} className="flex gap-3 hover:bg-white/5 py-0.5 px-2 rounded">
+                      <span className="text-muted-foreground opacity-50 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                      <span className={`shrink-0 w-16 ${
+                        log.level === 'INFO' ? 'text-blue-400' :
+                        log.level === 'SUCCESS' ? 'text-green-400' : 
+                        log.level === 'WARNING' ? 'text-yellow-400' : 'text-red-400'
+                      }`}>{log.level}</span>
+                      <span className="text-foreground/90">{log.message}</span>
+                    </div>
+                  ))
+                )}
                 <div className="h-4 w-2 bg-primary animate-pulse mt-2 ml-2" />
               </div>
             </ScrollArea>
