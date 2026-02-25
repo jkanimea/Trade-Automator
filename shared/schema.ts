@@ -80,3 +80,27 @@ export const insertSettingSchema = createInsertSchema(settings).omit({
 
 export type InsertSetting = z.infer<typeof insertSettingSchema>;
 export type Setting = typeof settings.$inferSelect;
+
+export const channelSignals = pgTable("channel_signals", {
+  id: serial("id").primaryKey(),
+  channelId: text("channel_id").notNull(),
+  channelName: text("channel_name").notNull(),
+  messageId: text("message_id").notNull(),
+  messageDate: timestamp("message_date").notNull(),
+  symbol: text("symbol").notNull(),
+  direction: text("direction").notNull(),
+  entry: real("entry").notNull(),
+  stopLoss: real("stop_loss").notNull(),
+  takeProfits: real("take_profits").array().notNull(),
+  outcome: text("outcome").notNull().default("PENDING"),
+  rawMessage: text("raw_message"),
+  analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
+});
+
+export const insertChannelSignalSchema = createInsertSchema(channelSignals).omit({
+  id: true,
+  analyzedAt: true,
+});
+
+export type InsertChannelSignal = z.infer<typeof insertChannelSignalSchema>;
+export type ChannelSignal = typeof channelSignals.$inferSelect;

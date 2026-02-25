@@ -3,10 +3,11 @@ import {
   type Trade, type InsertTrade,
   type SystemLog, type InsertSystemLog,
   type Setting, type InsertSetting,
-  signals, trades, systemLogs, settings
+  type ChannelSignal, type InsertChannelSignal,
+  signals, trades, systemLogs, settings, channelSignals
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   // Signals
@@ -30,6 +31,12 @@ export interface IStorage {
   getSetting(key: string): Promise<Setting | undefined>;
   getSettings(): Promise<Setting[]>;
   upsertSetting(setting: InsertSetting): Promise<Setting>;
+
+  // Channel Signals
+  getChannelSignals(): Promise<ChannelSignal[]>;
+  getChannelSignalsByChannel(channelId: string): Promise<ChannelSignal[]>;
+  createChannelSignal(signal: InsertChannelSignal): Promise<ChannelSignal>;
+  clearChannelSignals(channelId: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -109,6 +116,32 @@ export class DbStorage implements IStorage {
       const result = await db.insert(settings).values(setting).returning();
       return result[0];
     }
+  }
+
+  // Channel Signals
+  async getChannelSignals(): Promise<ChannelSignal[]> {
+    return await db.select().from(channelSignals).orderBy(desc(channelSignals.messageDate));
+  }
+
+  async getChannelSignalsByChannel(channelId: string): Promise<ChannelSignal[]> {
+    return await db.select().from(channelSignals)
+      .where(eq(channelSignals.channelId, channelId))
+      .orderBy(desc(channelSignals.messageDate));
+  }
+
+  async createChannelSignal(signal: InsertChannelSignal): Promise<ChannelSignal> {
+    const existing = await db.select().from(channelSignals)
+      .where(and(
+        eq(channelSignals.channelId, signal.channelId),
+        eq(channelSignals.messageId, signal.messageId)
+      ));
+    if (existing.length > 0) return existing[0];
+    const result = await db.insert(channelSignals).values(signal).returning();
+    return result[0];
+  }
+
+  async clearChannelSignals(channelId: string): Promise<void> {
+    await db.delete(channelSignals).where(eq(channelSignals.channelId, channelId));
   }
 }
 

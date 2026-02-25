@@ -5,7 +5,8 @@ import {
   Settings, 
   Terminal, 
   Activity,
-  LineChart
+  LineChart,
+  BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Signals', href: '/signals', icon: Radio },
   { name: 'Active Trades', href: '/trades', icon: Activity },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'System Logs', href: '/logs', icon: Terminal },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

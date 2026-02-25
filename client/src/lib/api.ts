@@ -103,3 +103,13 @@ export async function getStatus(): Promise<any> {
   if (!response.ok) throw new Error("Failed to fetch status");
   return response.json();
 }
+
+// Channel Signals (analytics)
+export async function getChannelSignals(channelId?: string): Promise<any[]> {
+  const url = channelId 
+    ? `${API_BASE}/channel-signals?channelId=${encodeURIComponent(channelId)}`
+    : `${API_BASE}/channel-signals`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Failed to fetch channel signals");
+  return response.json();
+}

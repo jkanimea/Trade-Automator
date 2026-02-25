@@ -9,6 +9,7 @@ import Settings from "@/pages/Settings";
 import Signals from "@/pages/Signals";
 import Logs from "@/pages/Logs";
 import Trades from "@/pages/Trades";
+import Analytics from "@/pages/Analytics";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/signals" component={Signals} />
       <Route path="/logs" component={Logs} />
       <Route path="/trades" component={Trades} />
+      <Route path="/analytics" component={Analytics} />
       <Route component={NotFound} />
     </Switch>
   );

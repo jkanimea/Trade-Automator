@@ -5,6 +5,7 @@ import asyncio
 import aiohttp
 import urllib.request
 from telethon import TelegramClient, events
+from telethon.tl.types import PeerChannel
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "telegram_session")
@@ -116,11 +117,33 @@ async def main():
     print(f"Logged in as: {me.first_name} (@{me.username})")
     await log_to_api("SUCCESS", f"Telegram Listener: Logged in as {me.first_name} (@{me.username})")
 
+    async def resolve_entity(ch_id):
+        if ch_id.lstrip('-').isdigit():
+            num = int(ch_id)
+            try:
+                return await client.get_entity(num)
+            except:
+                pass
+            raw = abs(num)
+            if raw > 1000000000:
+                try:
+                    return await client.get_entity(PeerChannel(raw))
+                except:
+                    pass
+            if str(raw).startswith("100"):
+                stripped = int(str(raw)[3:])
+                try:
+                    return await client.get_entity(PeerChannel(stripped))
+                except:
+                    pass
+        else:
+            return await client.get_entity(ch_id)
+        raise Exception(f"Could not resolve channel: {ch_id}")
+
     resolved_channels = []
     for ch in monitored_channels:
         try:
-            lookup = int(ch) if ch.lstrip('-').isdigit() else ch
-            entity = await client.get_entity(lookup)
+            entity = await resolve_entity(ch)
             resolved_channels.append(entity.id)
             print(f"Resolved channel: {ch} -> {entity.id} ({getattr(entity, 'title', ch)})")
             await log_to_api("INFO", f"Telegram Listener: Monitoring channel \"{getattr(entity, 'title', ch)}\"")

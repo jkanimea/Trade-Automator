@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertSignalSchema, insertTradeSchema, insertSystemLogSchema, insertSettingSchema } from "@shared/schema";
+import { insertSignalSchema, insertTradeSchema, insertSystemLogSchema, insertSettingSchema, insertChannelSignalSchema } from "@shared/schema";
 import { WebSocketServer, WebSocket } from "ws";
 import { fromZodError } from "zod-validation-error";
 
@@ -185,6 +185,65 @@ export async function registerRoutes(
       }
       const setting = await storage.upsertSetting(parsed.data);
       res.json(setting);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Channel Signals (analytics)
+  app.get("/api/channel-signals", async (req, res) => {
+    try {
+      const channelId = req.query.channelId as string | undefined;
+      const data = channelId 
+        ? await storage.getChannelSignalsByChannel(channelId)
+        : await storage.getChannelSignals();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/channel-signals", async (req, res) => {
+    try {
+      const body = { ...req.body };
+      if (typeof body.messageDate === "string") body.messageDate = new Date(body.messageDate);
+      const parsed = insertChannelSignalSchema.safeParse(body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: fromZodError(parsed.error).message });
+      }
+      const signal = await storage.createChannelSignal(parsed.data);
+      res.json(signal);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/channel-signals/batch", async (req, res) => {
+    try {
+      const signals = req.body.signals;
+      if (!Array.isArray(signals)) {
+        return res.status(400).json({ error: "Expected { signals: [...] }" });
+      }
+      const results = [];
+      for (const sig of signals) {
+        const body = { ...sig };
+        if (typeof body.messageDate === "string") body.messageDate = new Date(body.messageDate);
+        const parsed = insertChannelSignalSchema.safeParse(body);
+        if (parsed.success) {
+          const created = await storage.createChannelSignal(parsed.data);
+          results.push(created);
+        }
+      }
+      res.json({ created: results.length, signals: results });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/channel-signals/:channelId", async (req, res) => {
+    try {
+      await storage.clearChannelSignals(req.params.channelId);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
