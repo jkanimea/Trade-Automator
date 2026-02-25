@@ -10,21 +10,17 @@ from telethon.tl.types import PeerChannel
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "telegram_session")
 
-SIGNAL_PATTERNS = [
-    r'🚀?\s*\*{0,2}(\w+(?:/\w+)?)\s*[-–]\s*(BUY|SELL)\s*\*{0,2}\s*🚀?\s*\*{0,2}Entry:?\*{0,2}\s*([\d.]+)\s*\*{0,2}(?:Stopp?-?\s*Loss|SL):?\*{0,2}\s*([\d.]+)\s*\*{0,2}(?:Take-?\s*Profit|TP)\s*1:?\*{0,2}\s*([\d.]+)(?:\s*\*{0,2}(?:Take-?\s*Profit|TP)\s*2:?\*{0,2}\s*([\d.]+))?(?:\s*\*{0,2}(?:Take-?\s*Profit|TP)\s*3:?\*{0,2}\s*([\d.]+))?',
-    r'(\w{3,8}(?:/\w{3,8})?)\s+(Buy|Sell|BUY|SELL)\s+([\d.]+)(?:/[\d.]+)?\s*(?:\n.*?)?(?:TP|tp)\s*1\.?\s*@?\s*([\d.]+).*?(?:SL|sl)\.?\s*@?\s*([\d.]+)',
-    r'(\w{3,8}(?:/\w{3,8})?)\s+(Buy|Sell|BUY|SELL)\s+([\d.]+)(?:/[\d.]+)?.*?(?:TP|tp)\s*1\.?\s*@?\s*([\d.]+).*?(?:SL|sl)\.?\s*@?\s*([\d.]+)',
-]
-
 OUTCOME_WIN_PATTERNS = [
-    r'(?:TP|take\s*profit|target)\s*(?:1|2|3)?\s*(?:hit|reached|done|✅|💰|🎯|✔)',
+    r'(?:TP|take\s*profit|target)\s*(?:\d)?\s*(?:hit|reached|done|complete|✅|💰|🎯|✔)',
     r'(?:✅|💚|🟢|✔️|✔)\s*(?:TP|profit|target|hit)',
     r'(?:profit|pips?|won|win)\s*(?:taken|booked|secured)',
     r'\+\s*\d+\s*pips?',
     r'closed?\s*(?:in\s*)?profit',
-    r'(?:all\s*)?(?:TP|targets?)\s*(?:hit|reached|done)',
+    r'(?:all\s*)?(?:TP|targets?)\s*(?:hit|reached|done|complete)',
     r'TP\s*\d?\s*done',
-    r'TP\s*\d?\s*HIT',
+    r'TP\s*\d?\s*(?:hit|HIT)\s*✅?',
+    r'TP\s*\d?\s*COMPLETE',
+    r'All\s*TP\s*COMPLETE',
 ]
 
 OUTCOME_LOSS_PATTERNS = [
@@ -49,81 +45,103 @@ def get_settings_sync():
     return {}
 
 
+def extract_tps_from_lines(text):
+    tps = []
+    for m in re.finditer(r'TP\s*\d*\.?\s*@?\s*([\d.]+)', text, re.IGNORECASE):
+        tps.append(float(m.group(1)))
+    return tps
+
+def extract_sl_from_lines(text):
+    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([\d.]+)', text, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+    return None
+
+
 def parse_signal(text):
     clean = text.replace('**', '').replace('__', '')
-    
-    for pattern in SIGNAL_PATTERNS:
-        match = re.search(pattern, clean, re.IGNORECASE | re.DOTALL)
-        if match:
-            groups = match.groups()
-            symbol = groups[0].upper()
-            direction = groups[1].upper()
-            entry = float(groups[2])
-            
-            if len(groups) >= 5 and groups[3] and groups[4]:
-                val3 = float(groups[3])
-                val4 = float(groups[4])
-                
-                if direction == "BUY":
-                    if val3 > entry:
-                        tp1 = val3
-                        stop_loss = val4
-                    else:
-                        stop_loss = val3
-                        tp1 = val4
-                else:
-                    if val3 < entry:
-                        tp1 = val3
-                        stop_loss = val4
-                    else:
-                        stop_loss = val3
-                        tp1 = val4
-                
-                take_profits = [tp1]
-            elif len(groups) >= 5:
-                stop_loss = float(groups[3]) if groups[3] else 0
-                tp1 = float(groups[4]) if groups[4] else 0
-                take_profits = [tp1]
-            else:
-                continue
 
-            if len(groups) >= 6 and groups[5]:
-                take_profits.append(float(groups[5]))
-            if len(groups) >= 7 and groups[6]:
-                take_profits.append(float(groups[6]))
-
-            return {
-                "symbol": symbol,
-                "direction": direction,
-                "entry": entry,
-                "stopLoss": stop_loss,
-                "takeProfits": take_profits,
-            }
-
-    xau_match = re.search(
-        r'(\w{3,8})\s+(Buy|Sell|BUY|SELL)\s+([\d.]+)(?:/[\d.]+)?\s*\n(?:.*\n)*?.*?TP\s*1\.?\s*@?\s*([\d.]+)(?:.*\n)*?.*?SL\.?\s*@?\s*([\d.]+)',
-        clean, re.IGNORECASE | re.MULTILINE
+    s2t_match = re.search(
+        r'🚀?\s*(\w+(?:/\w+)?)\s*[-–]\s*(BUY|SELL)\s*🚀?\s*Entry:?\s*([\d.]+)\s*(?:Stopp?-?\s*Loss|SL):?\s*([\d.]+)\s*(?:Take-?\s*Profit|TP)\s*1:?\s*([\d.]+)',
+        clean, re.IGNORECASE | re.DOTALL
     )
-    if xau_match:
-        symbol = xau_match.group(1).upper()
-        direction = xau_match.group(2).upper()
-        entry = float(xau_match.group(3))
-        tp1 = float(xau_match.group(4))
-        stop_loss = float(xau_match.group(5))
-        
-        tps = [tp1]
-        for i in range(2, 8):
-            tp_match = re.search(rf'TP\s*{i}\.?\s*@?\s*([\d.]+)', clean, re.IGNORECASE)
-            if tp_match:
-                tps.append(float(tp_match.group(1)))
-        
-        return {
-            "symbol": symbol,
-            "direction": direction,
-            "entry": entry,
-            "stopLoss": stop_loss,
-            "takeProfits": tps,
-        }
+    if s2t_match:
+        symbol = s2t_match.group(1).upper()
+        direction = s2t_match.group(2).upper()
+        entry = float(s2t_match.group(3))
+        stop_loss = float(s2t_match.group(4))
+        tps = [float(s2t_match.group(5))]
+        for i in range(2, 4):
+            tp_m = re.search(rf'(?:Take-?\s*Profit|TP)\s*{i}:?\s*([\d.]+)', clean, re.IGNORECASE)
+            if tp_m:
+                tps.append(float(tp_m.group(1)))
+        return {"symbol": symbol, "direction": direction, "entry": entry, "stopLoss": stop_loss, "takeProfits": tps}
+
+    alex_match = re.search(
+        r'(\w{3,10})\s+(BUY|SELL)\s+NOW\s+([\d]+)[_/]?([\d]*)',
+        clean, re.IGNORECASE
+    )
+    if alex_match:
+        symbol = alex_match.group(1).upper()
+        direction = alex_match.group(2).upper()
+        entry_str = alex_match.group(3)
+        entry = float(entry_str)
+        tps = extract_tps_from_lines(clean)
+        sl = extract_sl_from_lines(clean)
+        if tps and sl is not None:
+            return {"symbol": symbol, "direction": direction, "entry": entry, "stopLoss": sl, "takeProfits": tps}
+
+    fred_enter_match = re.search(
+        r'(\w{3,10})\s+(buy|sell)\s+now\s*\n.*?Enter\s+([\d.]+)',
+        clean, re.IGNORECASE | re.DOTALL
+    )
+    if fred_enter_match:
+        symbol = fred_enter_match.group(1).upper()
+        direction = fred_enter_match.group(2).upper()
+        entry = float(fred_enter_match.group(3))
+        tps = extract_tps_from_lines(clean)
+        sl = extract_sl_from_lines(clean)
+        if tps and sl is not None:
+            return {"symbol": symbol, "direction": direction, "entry": entry, "stopLoss": sl, "takeProfits": tps}
+
+    fred_at_match = re.search(
+        r'(\w{3,10})\s+(buy|sell)\s+now\s+(?:at\s+)?([\d.]+)',
+        clean, re.IGNORECASE
+    )
+    if fred_at_match:
+        symbol = fred_at_match.group(1).upper()
+        direction = fred_at_match.group(2).upper()
+        entry = float(fred_at_match.group(3))
+        tps = extract_tps_from_lines(clean)
+        sl = extract_sl_from_lines(clean)
+        if tps and sl is not None:
+            return {"symbol": symbol, "direction": direction, "entry": entry, "stopLoss": sl, "takeProfits": tps}
+
+    irshad_match = re.search(
+        r'(\w{3,10})\s+(Buy|Sell)\s+([\d.]+)(?:/([\d.]+))?\s*\n',
+        clean, re.IGNORECASE
+    )
+    if irshad_match:
+        symbol = irshad_match.group(1).upper()
+        direction = irshad_match.group(2).upper()
+        entry = float(irshad_match.group(3))
+        tps = extract_tps_from_lines(clean)
+        sl = extract_sl_from_lines(clean)
+        if tps and sl is not None:
+            return {"symbol": symbol, "direction": direction, "entry": entry, "stopLoss": sl, "takeProfits": tps}
+
+    generic_match = re.search(
+        r'(\w{3,10}(?:/\w{3,10})?)\s+(Buy|Sell|BUY|SELL)\s+([\d.]+)',
+        clean, re.IGNORECASE
+    )
+    if generic_match:
+        symbol = generic_match.group(1).upper()
+        direction = generic_match.group(2).upper()
+        entry = float(generic_match.group(3))
+        tps = extract_tps_from_lines(clean)
+        sl = extract_sl_from_lines(clean)
+        if tps and sl is not None:
+            return {"symbol": symbol, "direction": direction, "entry": entry, "stopLoss": sl, "takeProfits": tps}
 
     return None
 
@@ -216,7 +234,7 @@ async def resolve_entity(client, channel_id):
     raise Exception(f"Could not resolve channel: {channel_id}")
 
 
-async def fetch_channel_history(client, channel_id, channel_name, limit=500):
+async def fetch_channel_history(client, channel_id, channel_name, limit=1000):
     print(f"\n{'='*60}")
     print(f"Fetching history for: {channel_name} ({channel_id})")
     print(f"{'='*60}")
