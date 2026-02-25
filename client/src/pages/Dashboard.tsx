@@ -97,20 +97,29 @@ export default function Dashboard() {
         <Header title="Dashboard" />
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
             <MetricCard
-              title="Total Profit"
-              value={`$${totalProfit.toFixed(2)}`}
-              change={totalProfit >= 0 ? `+${((totalProfit / 10000) * 100).toFixed(1)}%` : `${((totalProfit / 10000) * 100).toFixed(1)}%`}
-              trend={totalProfit >= 0 ? "up" : "down"}
+              title="Total Signals"
+              value={overallChannelStats.total.toString()}
+              change={`${overallChannelStats.decided} decided · ${overallChannelStats.pending} pending`}
+              trend="neutral"
               icon={<Zap className="h-4 w-4 text-primary" />}
             />
             <MetricCard
-              title="Channel Signals"
-              value={overallChannelStats.total.toString()}
-              change={`${overallChannelStats.winRate.toFixed(1)}% Win Rate`}
-              trend={overallChannelStats.winRate >= 50 ? "up" : "down"}
+              title="Success Rate"
+              value={`${overallChannelStats.winRate.toFixed(1)}%`}
+              change={`${overallChannelStats.wins} winning signals`}
+              trend="up"
               icon={<ArrowUpRight className="h-4 w-4 text-success" />}
+              valueColor={overallChannelStats.winRate >= 50 ? COLORS.WIN : COLORS.LOSS}
+            />
+            <MetricCard
+              title="Failure Rate"
+              value={`${overallChannelStats.decided > 0 ? ((overallChannelStats.losses / overallChannelStats.decided) * 100).toFixed(1) : '0.0'}%`}
+              change={`${overallChannelStats.losses} losing signals`}
+              trend="down"
+              icon={<ArrowDownRight className="h-4 w-4 text-destructive" />}
+              valueColor={COLORS.LOSS}
             />
             <MetricCard
               title="Active Trades"
@@ -120,10 +129,10 @@ export default function Dashboard() {
               icon={<Clock className="h-4 w-4 text-warning" />}
             />
             <MetricCard
-              title="Risk Level"
-              value="Low"
-              change="2% Max Drawdown"
-              trend="up"
+              title="Total Profit"
+              value={`$${totalProfit.toFixed(2)}`}
+              change={totalProfit >= 0 ? `+${((totalProfit / 10000) * 100).toFixed(1)}%` : `${((totalProfit / 10000) * 100).toFixed(1)}%`}
+              trend={totalProfit >= 0 ? "up" : "down"}
               icon={<ShieldCheck className="h-4 w-4 text-success" />}
             />
           </div>
@@ -369,7 +378,7 @@ export default function Dashboard() {
   );
 }
 
-function MetricCard({ title, value, change, trend, icon }: any) {
+function MetricCard({ title, value, change, trend, icon, valueColor }: any) {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-border">
       <CardContent className="p-6">
@@ -378,7 +387,7 @@ function MetricCard({ title, value, change, trend, icon }: any) {
           {icon}
         </div>
         <div className="flex items-center justify-between pt-2">
-          <div className="text-2xl font-bold font-mono text-glow">{value}</div>
+          <div className="text-2xl font-bold font-mono text-glow" style={valueColor ? { color: valueColor } : undefined}>{value}</div>
           <p className={`text-xs ${trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground'}`}>
             {change}
           </p>
