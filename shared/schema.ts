@@ -93,6 +93,7 @@ export const channelSignals = pgTable("channel_signals", {
   stopLoss: real("stop_loss").notNull(),
   takeProfits: real("take_profits").array().notNull(),
   outcome: text("outcome").notNull().default("PENDING"),
+  verificationNote: text("verification_note"),
   rawMessage: text("raw_message"),
   analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
 });

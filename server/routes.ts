@@ -240,6 +240,23 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/channel-signals/:id/verify", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { outcome, verificationNote } = req.body;
+      if (!outcome) {
+        return res.status(400).json({ error: "outcome is required" });
+      }
+      const updated = await storage.updateChannelSignalOutcome(id, outcome, verificationNote || "");
+      if (!updated) {
+        return res.status(404).json({ error: "Signal not found" });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.delete("/api/channel-signals/:channelId", async (req, res) => {
     try {
       await storage.clearChannelSignals(req.params.channelId);
