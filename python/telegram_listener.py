@@ -83,7 +83,14 @@ async def main():
 
     monitored_channels_raw = settings.get("telegram_channels", "[]")
     try:
-        monitored_channels = json.loads(monitored_channels_raw)
+        parsed_channels = json.loads(monitored_channels_raw)
+        monitored_channels = []
+        for ch in parsed_channels:
+            if isinstance(ch, dict):
+                monitored_channels.append(ch.get("id", ""))
+            else:
+                monitored_channels.append(str(ch))
+        monitored_channels = [c for c in monitored_channels if c]
     except json.JSONDecodeError:
         monitored_channels = []
 

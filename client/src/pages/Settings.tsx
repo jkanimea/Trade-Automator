@@ -31,7 +31,8 @@ export default function Settings() {
   const [dailyLossLimit, setDailyLossLimit] = useState("500");
   const [autoBreakEven, setAutoBreakEven] = useState(true);
   const [newChannel, setNewChannel] = useState("");
-  const [channels, setChannels] = useState<string[]>([]);
+  const [newChannelLabel, setNewChannelLabel] = useState("");
+  const [channels, setChannels] = useState<{id: string, label: string}[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
   const [telegramApiId, setTelegramApiId] = useState("");
   const [telegramApiHash, setTelegramApiHash] = useState("");
@@ -49,7 +50,13 @@ export default function Settings() {
       setTelegramPhone(settingsMap["telegram_phone"] || "");
       const channelList = settingsMap["telegram_channels"];
       if (channelList) {
-        setChannels(JSON.parse(channelList));
+        const parsed = JSON.parse(channelList);
+        if (Array.isArray(parsed)) {
+          const normalized = parsed.map((ch: any) =>
+            typeof ch === "string" ? { id: ch, label: ch } : ch
+          );
+          setChannels(normalized);
+        }
       }
     }
   }, [settingsData]);
@@ -107,28 +114,34 @@ export default function Settings() {
     });
   };
 
+  const saveChannels = async (updated: {id: string, label: string}[]) => {
+    await saveMutation.mutateAsync({
+      key: "telegram_channels",
+      value: JSON.stringify(updated),
+    });
+  };
+
   const handleAddChannel = async () => {
     if (!newChannel.trim()) {
       toast({
         title: "Error",
-        description: "Please enter a channel name or ID.",
+        description: "Please enter a channel ID or username.",
         variant: "destructive",
       });
       return;
     }
 
-    const updatedChannels = [...channels, newChannel.trim()];
+    const entry = { id: newChannel.trim(), label: newChannelLabel.trim() || newChannel.trim() };
+    const updatedChannels = [...channels, entry];
     setChannels(updatedChannels);
     setNewChannel("");
+    setNewChannelLabel("");
 
     try {
-      await saveMutation.mutateAsync({ 
-        key: "telegram_channels", 
-        value: JSON.stringify(updatedChannels) 
-      });
+      await saveChannels(updatedChannels);
       toast({
         title: "Channel Added",
-        description: `"${newChannel.trim()}" has been added to monitored channels.`,
+        description: `"${entry.label}" has been added to monitored channels.`,
       });
     } catch (error) {
       toast({
@@ -139,18 +152,16 @@ export default function Settings() {
     }
   };
 
-  const handleRemoveChannel = async (channelToRemove: string) => {
-    const updatedChannels = channels.filter(c => c !== channelToRemove);
+  const handleRemoveChannel = async (channelId: string) => {
+    const removed = channels.find(c => c.id === channelId);
+    const updatedChannels = channels.filter(c => c.id !== channelId);
     setChannels(updatedChannels);
 
     try {
-      await saveMutation.mutateAsync({ 
-        key: "telegram_channels", 
-        value: JSON.stringify(updatedChannels) 
-      });
+      await saveChannels(updatedChannels);
       toast({
         title: "Channel Removed",
-        description: `"${channelToRemove}" has been removed.`,
+        description: `"${removed?.label || channelId}" has been removed.`,
       });
     } catch (error) {
       toast({
@@ -398,16 +409,23 @@ export default function Settings() {
                 <Label>Monitored Channels</Label>
                 <div className="flex gap-2">
                   <Input 
-                    placeholder="Enter Channel ID or Username" 
-                    className="bg-background/50"
+                    placeholder="Channel ID or @username" 
+                    className="bg-background/50 flex-1"
                     value={newChannel}
                     onChange={(e) => setNewChannel(e.target.value)}
+                    data-testid="input-new-channel"
+                  />
+                  <Input 
+                    placeholder="Description (e.g. Trade with Alex)" 
+                    className="bg-background/50 flex-1"
+                    value={newChannelLabel}
+                    onChange={(e) => setNewChannelLabel(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleAddChannel();
                       }
                     }}
-                    data-testid="input-new-channel"
+                    data-testid="input-new-channel-label"
                   />
                   <Button 
                     variant="secondary" 
@@ -416,7 +434,7 @@ export default function Settings() {
                     data-testid="button-add-channel"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Channel
+                    Add
                   </Button>
                 </div>
                 <div className="space-y-2 mt-4">
@@ -431,12 +449,15 @@ export default function Settings() {
                         className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30"
                         data-testid={`channel-item-${index}`}
                       >
-                        <span className="font-mono text-sm">{channel}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">{channel.label}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{channel.id}</span>
+                        </div>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           className="h-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemoveChannel(channel)}
+                          onClick={() => handleRemoveChannel(channel.id)}
                           data-testid={`button-remove-channel-${index}`}
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
