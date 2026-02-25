@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2, Bot } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, RefreshCw } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -326,10 +326,25 @@ export default function Settings() {
                 {botTokenStatus === "configured" ? (
                   <div className="flex items-center gap-3 p-3 rounded-md border border-success/30 bg-success/5">
                     <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-success">Bot Token Configured</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Stored securely as an environment secret (TELEGRAM_BOT_TOKEN)</p>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => {
+                        toast({
+                          title: "Update Bot Token",
+                          description: "Go to the Secrets tab (lock icon) in the sidebar and update the TELEGRAM_BOT_TOKEN value, then restart the app.",
+                        });
+                      }}
+                      data-testid="button-change-bot-token"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                      Change Token
+                    </Button>
                   </div>
                 ) : botTokenStatus === "not_configured" ? (
                   <div className="flex items-center gap-3 p-3 rounded-md border border-destructive/30 bg-destructive/5">
