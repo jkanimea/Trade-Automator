@@ -10,25 +10,22 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2 } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch existing settings
   const { data: settingsData = [] } = useQuery({
     queryKey: ["settings"],
     queryFn: getSettings,
   });
 
-  // Parse settings into a map
   const settingsMap = settingsData.reduce((acc, s) => {
     acc[s.key] = s.value;
     return acc;
   }, {} as Record<string, string>);
 
-  // Form state
   const [accountId, setAccountId] = useState("");
   const [maxRisk, setMaxRisk] = useState("2.0");
   const [dailyLossLimit, setDailyLossLimit] = useState("500");
@@ -36,8 +33,22 @@ export default function Settings() {
   const [newChannel, setNewChannel] = useState("");
   const [channels, setChannels] = useState<string[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
+  const [botToken, setBotToken] = useState("");
+  const [showBotToken, setShowBotToken] = useState(false);
+  const [botTokenStatus, setBotTokenStatus] = useState<"unknown" | "configured" | "not_configured">("unknown");
 
-  // Initialize form from settings
+  useEffect(() => {
+    fetch("/api/status")
+      .then(res => res.json())
+      .then(data => {
+        setBotTokenStatus(data.telegram_bot_token ? "configured" : "not_configured");
+        if (data.telegram_bot_token) {
+          setBotToken("configured-via-env");
+        }
+      })
+      .catch(() => setBotTokenStatus("unknown"));
+  }, []);
+
   useEffect(() => {
     if (settingsData.length > 0) {
       setAccountId(settingsMap["ctrader_account_id"] || "");
@@ -308,11 +319,56 @@ export default function Settings() {
 
           <Card className="bg-card/50 backdrop-blur-sm border-border">
             <CardHeader>
-              <CardTitle>Telegram Channels</CardTitle>
-              <CardDescription>Configure source channels for signal parsing</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Telegram Configuration
+              </CardTitle>
+              <CardDescription>Bot token and source channels for signal parsing</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="space-y-2">
+                <Label htmlFor="bot-token">Bot Token</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="bot-token"
+                      type={showBotToken ? "text" : "password"}
+                      value={botTokenStatus === "configured" ? "••••••••••••••••••••••••••••••••••••" : ""}
+                      className="bg-background/50 font-mono pr-10"
+                      readOnly
+                      placeholder={botTokenStatus === "not_configured" ? "Not configured" : "Loading..."}
+                      data-testid="input-bot-token"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBotToken(!showBotToken)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      data-testid="button-toggle-token-visibility"
+                    >
+                      {showBotToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  {botTokenStatus === "configured" ? (
+                    <span className="text-xs text-success flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Bot token configured via environment secret
+                    </span>
+                  ) : botTokenStatus === "not_configured" ? (
+                    <span className="text-xs text-destructive">
+                      Not configured — add TELEGRAM_BOT_TOKEN in Replit Secrets
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Checking status...</span>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>Monitored Channels</Label>
                 <div className="flex gap-2">
                   <Input 
                     placeholder="Enter Channel ID or Username" 

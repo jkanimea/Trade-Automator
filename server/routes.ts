@@ -187,6 +187,7 @@ export async function registerRoutes(
     res.json({
       telegram: "connected",
       ctrader: "connected",
+      telegram_bot_token: !!process.env.TELEGRAM_BOT_TOKEN,
       uptime: process.uptime(),
       timestamp: new Date().toISOString()
     });
