@@ -2,7 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Radio } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Radio, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { getTrades, getChannelSignals, getSignals } from "@/lib/api";
@@ -32,18 +32,27 @@ export default function Trades() {
   }, [liveSignals]);
 
   const pendingChannelSignals = useMemo(() => {
-    return channelSignals.filter((s: any) => s.outcome === "PENDING");
+    const pending = channelSignals.filter((s: any) => s.outcome === "PENDING");
+    const grouped: Record<string, { channelName: string; signals: any[] }> = {};
+    for (const sig of pending) {
+      if (!grouped[sig.channelId]) {
+        grouped[sig.channelId] = { channelName: sig.channelName, signals: [] };
+      }
+      grouped[sig.channelId].signals.push(sig);
+    }
+    return Object.entries(grouped);
   }, [channelSignals]);
 
   return (
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Active Positions" />
+        <Header title="Active Trades" />
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
+
           <Card className="bg-card/50 backdrop-blur-sm border-border">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Open Trades</CardTitle>
+              <CardTitle>Open Positions</CardTitle>
               <div className="flex gap-2">
                  <Button variant="destructive" size="sm" data-testid="button-close-all">Close All</Button>
                  <Button variant="secondary" size="sm" data-testid="button-hedge-all">Hedge All</Button>
@@ -53,12 +62,12 @@ export default function Trades() {
               {isLoading ? (
                 <div className="text-center text-muted-foreground py-8">Loading trades...</div>
               ) : trades.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">No active trades</div>
+                <div className="text-center text-muted-foreground py-8">No open positions</div>
               ) : (
                 <div className="relative w-full overflow-auto">
                   <table className="w-full caption-bottom text-sm">
                     <thead className="[&_tr]:border-b">
-                      <tr className="border-b border-border transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                      <tr className="border-b border-border">
                         <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Symbol</th>
                         <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Ticket</th>
                         <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Type</th>
@@ -106,134 +115,120 @@ export default function Trades() {
           <Card className="bg-card/50 backdrop-blur-sm border-border">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Radio className="h-5 w-5 text-primary" />
+                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
                 <CardTitle>Live Signals</CardTitle>
                 {pendingLiveSignals.length > 0 && (
                   <Badge variant="outline" className="ml-2">{pendingLiveSignals.length} active</Badge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Signals received from Telegram channels awaiting execution</p>
+              <p className="text-xs text-muted-foreground mt-1">Signals just received — awaiting execution or outcome</p>
             </CardHeader>
             <CardContent>
               {loadingLiveSignals ? (
-                <div className="text-center text-muted-foreground py-6">Loading signals...</div>
+                <div className="text-center text-muted-foreground py-6">Loading...</div>
               ) : pendingLiveSignals.length === 0 ? (
-                <div className="text-center text-muted-foreground py-6">No pending live signals</div>
+                <div className="text-center text-muted-foreground py-6">No live signals right now</div>
               ) : (
-                <div className="relative w-full overflow-auto">
-                  <table className="w-full caption-bottom text-sm">
-                    <thead className="[&_tr]:border-b">
-                      <tr className="border-b border-border">
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Symbol</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Direction</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Entry</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">SL</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">TP1</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">TP2</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">TP3</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Time</th>
-                      </tr>
-                    </thead>
-                    <tbody className="[&_tr:last-child]:border-0">
-                      {pendingLiveSignals.map((sig: any) => (
-                        <tr key={sig.id} className="border-b border-border transition-colors hover:bg-muted/50" data-testid={`row-live-signal-${sig.id}`}>
-                          <td className="p-4 align-middle font-mono font-bold">{sig.symbol}</td>
-                          <td className="p-4 align-middle">
-                            <Badge variant={sig.direction === 'BUY' ? 'default' : 'destructive'} className="flex items-center gap-1 w-fit">
-                              {sig.direction === 'BUY' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                              {sig.direction}
-                            </Badge>
-                          </td>
-                          <td className="p-4 align-middle text-right font-mono">{sig.entry}</td>
-                          <td className="p-4 align-middle text-right font-mono text-destructive">{sig.stopLoss}</td>
-                          <td className="p-4 align-middle text-right font-mono text-success">{sig.takeProfits?.[0] ?? '—'}</td>
-                          <td className="p-4 align-middle text-right font-mono text-success">{sig.takeProfits?.[1] ?? '—'}</td>
-                          <td className="p-4 align-middle text-right font-mono text-success">{sig.takeProfits?.[2] ?? '—'}</td>
-                          <td className="p-4 align-middle">
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                              <span className="text-xs text-amber-500 font-medium">PENDING</span>
+                <div className="space-y-2">
+                  {pendingLiveSignals.map((sig: any) => (
+                    <div key={sig.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border border-border bg-background/30" data-testid={`row-live-signal-${sig.id}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 ${
+                          sig.direction === 'BUY' ? 'bg-success/10 border-success/30 text-success' : 'bg-destructive/10 border-destructive/30 text-destructive'
+                        }`}>
+                          {sig.direction === 'BUY' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-sm">{sig.symbol}</span>
+                            <Badge variant="outline" className="text-[10px] font-mono h-5">{sig.direction}</Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground mt-0.5">
+                            <span>Entry: <span className="text-foreground">{sig.entry}</span></span>
+                            <ArrowRight className="h-2.5 w-2.5" />
+                            <span>SL: <span className="text-destructive">{sig.stopLoss}</span></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5 flex-wrap">
+                          {sig.takeProfits?.map((tp: number, idx: number) => (
+                            <div key={idx} className="bg-background/50 border border-border px-2 py-0.5 rounded text-[11px] font-mono">
+                              <span className="text-muted-foreground mr-1">TP{idx + 1}</span>
+                              <span className="text-success">{tp}</span>
                             </div>
-                          </td>
-                          <td className="p-4 align-middle text-xs text-muted-foreground">
-                            {new Date(sig.timestamp).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                          <span className="text-xs text-amber-500 font-medium font-mono">LIVE</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {new Date(sig.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="bg-card/50 backdrop-blur-sm border-border">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Radio className="h-5 w-5 text-amber-500" />
-                <CardTitle>Channel Signals — Pending</CardTitle>
-                {pendingChannelSignals.length > 0 && (
-                  <Badge variant="outline" className="ml-2">{pendingChannelSignals.length} pending</Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Historical signals from channels that haven't resolved (no TP or SL confirmation found)</p>
-            </CardHeader>
-            <CardContent>
-              {loadingChannelSignals ? (
-                <div className="text-center text-muted-foreground py-6">Loading...</div>
-              ) : pendingChannelSignals.length === 0 ? (
-                <div className="text-center text-muted-foreground py-6">No pending channel signals</div>
-              ) : (
-                <div className="relative w-full overflow-auto">
-                  <table className="w-full caption-bottom text-sm">
-                    <thead className="[&_tr]:border-b">
-                      <tr className="border-b border-border">
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Channel</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Symbol</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Direction</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Entry</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">SL</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">TP1</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">TP2</th>
-                        <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">TP3</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
-                        <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="[&_tr:last-child]:border-0">
-                      {pendingChannelSignals.map((sig: any) => (
-                        <tr key={sig.id} className="border-b border-border transition-colors hover:bg-muted/50" data-testid={`row-channel-signal-${sig.id}`}>
-                          <td className="p-4 align-middle text-xs text-muted-foreground max-w-[120px] truncate">{sig.channelName}</td>
-                          <td className="p-4 align-middle font-mono font-bold">{sig.symbol}</td>
-                          <td className="p-4 align-middle">
-                            <Badge variant={sig.direction === 'BUY' ? 'default' : 'destructive'} className="flex items-center gap-1 w-fit">
-                              {sig.direction === 'BUY' ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                              {sig.direction}
-                            </Badge>
-                          </td>
-                          <td className="p-4 align-middle text-right font-mono">{sig.entry}</td>
-                          <td className="p-4 align-middle text-right font-mono text-destructive">{sig.stopLoss}</td>
-                          <td className="p-4 align-middle text-right font-mono text-success">{sig.takeProfits?.[0] ?? '—'}</td>
-                          <td className="p-4 align-middle text-right font-mono text-success">{sig.takeProfits?.[1] ?? '—'}</td>
-                          <td className="p-4 align-middle text-right font-mono text-success">{sig.takeProfits?.[2] ?? '—'}</td>
-                          <td className="p-4 align-middle">
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                              <span className="text-xs text-amber-500 font-medium">PENDING</span>
-                            </div>
-                          </td>
-                          <td className="p-4 align-middle text-xs text-muted-foreground">
-                            {new Date(sig.messageDate).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {pendingChannelSignals.length > 0 && pendingChannelSignals.map(([channelId, group]) => (
+            <Card key={channelId} className="bg-card/50 backdrop-blur-sm border-border">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Radio className="h-4 w-4 text-amber-500" />
+                  <CardTitle className="text-base">{group.channelName}</CardTitle>
+                  <Badge variant="outline" className="ml-1 text-[10px]">{group.signals.length} pending</Badge>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <p className="text-xs text-muted-foreground mt-1">Signals not yet resolved (no TP or SL confirmation)</p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {group.signals.map((sig: any) => (
+                    <div key={sig.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border border-border bg-background/30" data-testid={`row-channel-signal-${sig.id}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 ${
+                          sig.direction === 'BUY' ? 'bg-success/10 border-success/30 text-success' : 'bg-destructive/10 border-destructive/30 text-destructive'
+                        }`}>
+                          {sig.direction === 'BUY' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-sm">{sig.symbol}</span>
+                            <Badge variant="outline" className="text-[10px] font-mono h-5">{sig.direction}</Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground mt-0.5">
+                            <span>Entry: <span className="text-foreground">{sig.entry}</span></span>
+                            <ArrowRight className="h-2.5 w-2.5" />
+                            <span>SL: <span className="text-destructive">{sig.stopLoss}</span></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5 flex-wrap">
+                          {sig.takeProfits?.map((tp: number, idx: number) => (
+                            <div key={idx} className="bg-background/50 border border-border px-2 py-0.5 rounded text-[11px] font-mono">
+                              <span className="text-muted-foreground mr-1">TP{idx + 1}</span>
+                              <span className="text-success">{tp}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                          <span className="text-xs text-amber-500 font-medium font-mono">PENDING</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {new Date(sig.messageDate).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </main>
       </div>
     </div>

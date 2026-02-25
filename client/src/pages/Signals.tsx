@@ -42,35 +42,39 @@ export default function Signals() {
   });
 
   const allSignals: NormalizedSignal[] = useMemo(() => {
-    const live = liveSignals.map((s: any) => ({
-      id: `live-${s.id}`,
-      source: "live" as const,
-      channelId: "_live",
-      channelName: "Live Listener",
-      symbol: s.symbol,
-      direction: s.direction,
-      entry: s.entry,
-      stopLoss: s.stopLoss,
-      takeProfits: s.takeProfits || [],
-      outcome: s.status === "PENDING" ? "PENDING" : s.pnl && s.pnl > 0 ? "WIN" : s.pnl && s.pnl < 0 ? "LOSS" : "PENDING",
-      pnl: s.pnl,
-      date: new Date(s.timestamp),
-    }));
+    const live = liveSignals
+      .filter((s: any) => s.status !== "PENDING")
+      .map((s: any) => ({
+        id: `live-${s.id}`,
+        source: "live" as const,
+        channelId: "_live",
+        channelName: "Live Listener",
+        symbol: s.symbol,
+        direction: s.direction,
+        entry: s.entry,
+        stopLoss: s.stopLoss,
+        takeProfits: s.takeProfits || [],
+        outcome: s.pnl && s.pnl > 0 ? "WIN" : s.pnl && s.pnl < 0 ? "LOSS" : "PENDING",
+        pnl: s.pnl,
+        date: new Date(s.timestamp),
+      }));
 
-    const channel = channelSignals.map((s: any) => ({
-      id: `ch-${s.id}`,
-      source: "channel" as const,
-      channelId: s.channelId,
-      channelName: s.channelName,
-      symbol: s.symbol,
-      direction: s.direction,
-      entry: s.entry,
-      stopLoss: s.stopLoss,
-      takeProfits: s.takeProfits || [],
-      outcome: s.outcome,
-      pnl: null,
-      date: new Date(s.messageDate),
-    }));
+    const channel = channelSignals
+      .filter((s: any) => s.outcome !== "PENDING")
+      .map((s: any) => ({
+        id: `ch-${s.id}`,
+        source: "channel" as const,
+        channelId: s.channelId,
+        channelName: s.channelName,
+        symbol: s.symbol,
+        direction: s.direction,
+        entry: s.entry,
+        stopLoss: s.stopLoss,
+        takeProfits: s.takeProfits || [],
+        outcome: s.outcome,
+        pnl: null,
+        date: new Date(s.messageDate),
+      }));
 
     let list = [...live, ...channel];
     if (outcomeFilter !== "ALL") {
@@ -80,16 +84,15 @@ export default function Signals() {
   }, [liveSignals, channelSignals, outcomeFilter]);
 
   const channelGroups = useMemo(() => {
-    const groups: Record<string, { channelId: string; channelName: string; signals: NormalizedSignal[]; wins: number; losses: number; pending: number }> = {};
+    const groups: Record<string, { channelId: string; channelName: string; signals: NormalizedSignal[]; wins: number; losses: number }> = {};
 
     for (const sig of allSignals) {
       if (!groups[sig.channelId]) {
-        groups[sig.channelId] = { channelId: sig.channelId, channelName: sig.channelName, signals: [], wins: 0, losses: 0, pending: 0 };
+        groups[sig.channelId] = { channelId: sig.channelId, channelName: sig.channelName, signals: [], wins: 0, losses: 0 };
       }
       groups[sig.channelId].signals.push(sig);
       if (sig.outcome === "WIN") groups[sig.channelId].wins++;
       else if (sig.outcome === "LOSS") groups[sig.channelId].losses++;
-      else groups[sig.channelId].pending++;
     }
 
     for (const g of Object.values(groups)) {
@@ -104,7 +107,6 @@ export default function Signals() {
       total: allSignals.length,
       wins: allSignals.filter(s => s.outcome === "WIN").length,
       losses: allSignals.filter(s => s.outcome === "LOSS").length,
-      pending: allSignals.filter(s => s.outcome === "PENDING").length,
     };
   }, [allSignals]);
 
@@ -124,17 +126,17 @@ export default function Signals() {
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Signals" />
+        <Header title="Signal History" />
         <main className="flex-1 overflow-y-auto p-6 space-y-4">
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              {channelGroups.length} channel{channelGroups.length !== 1 ? 's' : ''} · {stats.total} signal{stats.total !== 1 ? 's' : ''}
+              Past signals across {channelGroups.length} channel{channelGroups.length !== 1 ? 's' : ''} · {stats.total} resolved
             </p>
             <div className="flex items-center gap-2">
               <Filter className="h-3.5 w-3.5 text-muted-foreground" />
               <div className="flex gap-1">
-                {(["ALL", "WIN", "LOSS", "PENDING"] as const).map((f) => (
+                {(["ALL", "WIN", "LOSS"] as const).map((f) => (
                   <Button
                     key={f}
                     variant={outcomeFilter === f ? "default" : "outline"}
@@ -147,7 +149,6 @@ export default function Signals() {
                     {f === "ALL" && <span className="ml-1 text-muted-foreground">({stats.total})</span>}
                     {f === "WIN" && <span className="ml-1 text-success">({stats.wins})</span>}
                     {f === "LOSS" && <span className="ml-1 text-destructive">({stats.losses})</span>}
-                    {f === "PENDING" && <span className="ml-1 text-amber-500">({stats.pending})</span>}
                   </Button>
                 ))}
               </div>
@@ -157,7 +158,7 @@ export default function Signals() {
           {isLoading ? (
             <div className="text-center text-muted-foreground py-8">Loading signals...</div>
           ) : channelGroups.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">No signals found</div>
+            <div className="text-center text-muted-foreground py-8">No past signals found</div>
           ) : (
             <div className="space-y-5">
               {channelGroups.map((group) => {
@@ -178,14 +179,15 @@ export default function Signals() {
                             : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                           <div>
                             <CardTitle className="text-base">{group.channelName}</CardTitle>
-                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{group.channelId !== "_live" ? group.channelId : "Real-time signals"}</p>
+                            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                              {group.channelId !== "_live" ? group.channelId : "Completed live signals"}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="flex gap-2 text-xs font-mono">
                             <span className="text-success">{group.wins}W</span>
                             <span className="text-destructive">{group.losses}L</span>
-                            <span className="text-muted-foreground">{group.pending}P</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="w-20 bg-muted rounded-full h-1.5 overflow-hidden">
@@ -233,7 +235,7 @@ export default function Signals() {
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-bold font-mono text-sm" data-testid={`text-signal-symbol-${signal.id}`}>{signal.symbol}</span>
+                                    <span className="font-bold font-mono text-sm">{signal.symbol}</span>
                                     <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground border-border h-5">
                                       {signal.direction}
                                     </Badge>
@@ -257,7 +259,7 @@ export default function Signals() {
                                 </div>
 
                                 <div className="flex flex-col items-end gap-0.5 min-w-[70px]">
-                                  <Badge className={`text-[10px] ${statusColor(signal.outcome)}`} data-testid={`badge-outcome-${signal.id}`}>
+                                  <Badge className={`text-[10px] ${statusColor(signal.outcome)}`}>
                                     {signal.outcome}
                                   </Badge>
                                   <span className="text-[10px] text-muted-foreground font-mono">
