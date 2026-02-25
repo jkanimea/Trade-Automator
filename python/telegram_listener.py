@@ -112,7 +112,8 @@ async def main():
     resolved_channels = []
     for ch in monitored_channels:
         try:
-            entity = await client.get_entity(ch)
+            lookup = int(ch) if ch.lstrip('-').isdigit() else ch
+            entity = await client.get_entity(lookup)
             resolved_channels.append(entity.id)
             print(f"Resolved channel: {ch} -> {entity.id} ({getattr(entity, 'title', ch)})")
             await log_to_api("INFO", f"Telegram Listener: Monitoring channel \"{getattr(entity, 'title', ch)}\"")
