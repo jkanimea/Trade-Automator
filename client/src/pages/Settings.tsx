@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -38,6 +38,9 @@ export default function Settings() {
   const [telegramApiHash, setTelegramApiHash] = useState("");
   const [telegramPhone, setTelegramPhone] = useState("");
   const [showApiHash, setShowApiHash] = useState(false);
+  const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+  const [editingId, setEditingId] = useState("");
 
   useEffect(() => {
     if (settingsData.length > 0) {
@@ -169,6 +172,39 @@ export default function Settings() {
         description: "Failed to remove channel.",
         variant: "destructive",
       });
+    }
+  };
+
+  const startEditing = (channel: {id: string, label: string}) => {
+    setEditingChannelId(channel.id);
+    setEditingId(channel.id);
+    setEditingLabel(channel.label);
+  };
+
+  const cancelEditing = () => {
+    setEditingChannelId(null);
+    setEditingId("");
+    setEditingLabel("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId.trim()) {
+      toast({ title: "Error", description: "Channel ID cannot be empty.", variant: "destructive" });
+      return;
+    }
+    const updatedChannels = channels.map(c =>
+      c.id === editingChannelId ? { id: editingId.trim(), label: editingLabel.trim() || editingId.trim() } : c
+    );
+    setChannels(updatedChannels);
+    setEditingChannelId(null);
+    setEditingId("");
+    setEditingLabel("");
+
+    try {
+      await saveChannels(updatedChannels);
+      toast({ title: "Channel Updated", description: "Channel details have been saved." });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to update channel.", variant: "destructive" });
     }
   };
 
@@ -446,23 +482,77 @@ export default function Settings() {
                     channels.map((channel, index) => (
                       <div 
                         key={index} 
-                        className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30"
+                        className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30 gap-3"
                         data-testid={`channel-item-${index}`}
                       >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">{channel.label}</span>
-                          <span className="font-mono text-xs text-muted-foreground">{channel.id}</span>
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemoveChannel(channel.id)}
-                          data-testid={`button-remove-channel-${index}`}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Remove
-                        </Button>
+                        {editingChannelId === channel.id ? (
+                          <>
+                            <div className="flex-1 flex gap-2">
+                              <Input
+                                value={editingId}
+                                onChange={(e) => setEditingId(e.target.value)}
+                                placeholder="Channel ID or @username"
+                                className="bg-background/50 font-mono text-sm h-8"
+                                data-testid={`input-edit-channel-id-${index}`}
+                              />
+                              <Input
+                                value={editingLabel}
+                                onChange={(e) => setEditingLabel(e.target.value)}
+                                placeholder="Description"
+                                className="bg-background/50 text-sm h-8"
+                                onKeyDown={(e) => { if (e.key === "Enter") handleSaveEdit(); }}
+                                data-testid={`input-edit-channel-label-${index}`}
+                              />
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-success hover:text-success hover:bg-success/10"
+                                onClick={handleSaveEdit}
+                                data-testid={`button-save-edit-${index}`}
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                onClick={cancelEditing}
+                                data-testid={`button-cancel-edit-${index}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <span className="text-sm font-medium">{channel.label}</span>
+                              <span className="font-mono text-xs text-muted-foreground truncate">{channel.id}</span>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => startEditing(channel)}
+                                data-testid={`button-edit-channel-${index}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => handleRemoveChannel(channel.id)}
+                                data-testid={`button-remove-channel-${index}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))
                   )}
