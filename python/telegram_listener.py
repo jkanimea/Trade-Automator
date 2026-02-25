@@ -90,13 +90,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await log_to_api("DEBUG", "No valid signal pattern found in message")
 
+async def get_bot_token():
+    """Get bot token from environment or database settings"""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if token:
+        return token
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{API_URL}/settings") as resp:
+                if resp.status == 200:
+                    settings = await resp.json()
+                    for s in settings:
+                        if s.get("key") == "telegram_bot_token" and s.get("value"):
+                            return s["value"]
+    except Exception:
+        pass
+    return None
+
 async def main():
     """Start Telegram listener"""
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    bot_token = await get_bot_token()
     
     if not bot_token:
-        print("ERROR: TELEGRAM_BOT_TOKEN not set")
-        await log_to_api("ERROR", "TELEGRAM_BOT_TOKEN environment variable not set")
+        print("ERROR: TELEGRAM_BOT_TOKEN not set in environment or settings")
+        await log_to_api("ERROR", "Telegram bot token not configured. Set it in Settings > Telegram Configuration.")
         return
     
     await log_to_api("INFO", "Telegram Listener: Starting up...")
