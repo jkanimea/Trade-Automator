@@ -8,7 +8,25 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
-TWELVE_DATA_KEY = os.getenv("TWELVE_DATA_API_KEY", "")
+
+
+def get_twelve_data_key():
+    key = os.getenv("TWELVE_DATA_API_KEY", "")
+    if key:
+        return key
+    try:
+        req = urllib.request.Request(f"{API_URL}/settings?internal=true")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            settings = json.loads(resp.read().decode())
+            for s in settings:
+                if s.get("key") == "twelve_data_api_key" and s.get("value"):
+                    return s["value"]
+    except:
+        pass
+    return ""
+
+
+TWELVE_DATA_KEY = get_twelve_data_key()
 
 SYMBOL_MAP = {
     "XAUUSD": "XAU/USD",

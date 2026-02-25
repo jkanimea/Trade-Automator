@@ -266,6 +266,27 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/verify-signals", async (req, res) => {
+    try {
+      const { exec } = await import("child_process");
+      const settings = await storage.getSettings();
+      const apiKey = settings.find(s => s.key === "twelve_data_api_key")?.value;
+      if (!apiKey) {
+        return res.status(400).json({ error: "Twelve Data API key not configured. Add it in Settings > Price Verification." });
+      }
+      const env = { ...process.env, TWELVE_DATA_API_KEY: apiKey };
+      exec("python python/verify_signals.py", { env, cwd: process.cwd() }, (error, stdout, stderr) => {
+        if (error) {
+          console.error("Verification error:", stderr);
+        }
+        console.log("Verification output:", stdout);
+      });
+      res.json({ message: "Signal verification started. This runs in the background — check the Logs page for progress." });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Python service status
   app.get("/api/status", async (req, res) => {
     res.json({

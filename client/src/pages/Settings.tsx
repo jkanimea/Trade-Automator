@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -41,6 +41,9 @@ export default function Settings() {
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingId, setEditingId] = useState("");
+  const [twelveDataApiKey, setTwelveDataApiKey] = useState("");
+  const [showTwelveDataKey, setShowTwelveDataKey] = useState(false);
+  const [runningVerification, setRunningVerification] = useState(false);
 
   useEffect(() => {
     if (settingsData.length > 0) {
@@ -51,6 +54,7 @@ export default function Settings() {
       setTelegramApiId(settingsMap["telegram_api_id"] || "");
       setTelegramApiHash(settingsMap["telegram_api_hash"] || "");
       setTelegramPhone(settingsMap["telegram_phone"] || "");
+      setTwelveDataApiKey(settingsMap["twelve_data_api_key"] || "");
       const channelList = settingsMap["telegram_channels"];
       if (channelList) {
         const parsed = JSON.parse(channelList);
@@ -557,6 +561,112 @@ export default function Settings() {
                     ))
                   )}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur-sm border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Price Verification
+              </CardTitle>
+              <CardDescription>Verify signal outcomes against real market price data using Twelve Data API</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="twelve-data-key">Twelve Data API Key</Label>
+                <div className="relative">
+                  <Input
+                    id="twelve-data-key"
+                    type={showTwelveDataKey ? "text" : "password"}
+                    value={twelveDataApiKey}
+                    onChange={(e) => setTwelveDataApiKey(e.target.value)}
+                    placeholder="Enter your Twelve Data API key"
+                    className="bg-background/50 font-mono pr-10"
+                    data-testid="input-twelve-data-key"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTwelveDataKey(!showTwelveDataKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    data-testid="button-toggle-twelve-data-visibility"
+                  >
+                    {showTwelveDataKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Get a free API key at{" "}
+                  <a href="https://twelvedata.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                    twelvedata.com
+                  </a>
+                  {" "}— 800 free checks per day, 8 per minute
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center gap-2">
+                <Button
+                  onClick={async () => {
+                    if (!twelveDataApiKey.trim()) {
+                      toast({ title: "Error", description: "Please enter an API key first.", variant: "destructive" });
+                      return;
+                    }
+                    try {
+                      await saveMutation.mutateAsync({ key: "twelve_data_api_key", value: twelveDataApiKey.trim() });
+                      toast({ title: "API Key Saved", description: "Twelve Data API key has been saved." });
+                    } catch (error) {
+                      toast({ title: "Error", description: "Failed to save API key.", variant: "destructive" });
+                    }
+                  }}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-twelve-data-key"
+                >
+                  {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save API Key
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-success border-success/30 hover:bg-success/10 hover:text-success"
+                  onClick={async () => {
+                    setRunningVerification(true);
+                    try {
+                      const resp = await fetch("/api/verify-signals", { method: "POST" });
+                      const data = await resp.json();
+                      if (data.error) {
+                        toast({ title: "Verification Error", description: data.error, variant: "destructive" });
+                      } else {
+                        toast({
+                          title: "Verification Started",
+                          description: data.message || "Signal verification is running in the background. Check logs for progress.",
+                        });
+                      }
+                    } catch (error) {
+                      toast({ title: "Error", description: "Failed to start verification.", variant: "destructive" });
+                    } finally {
+                      setRunningVerification(false);
+                    }
+                  }}
+                  disabled={runningVerification || !twelveDataApiKey.trim()}
+                  data-testid="button-run-verification"
+                >
+                  {runningVerification ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  Run Price Verification
+                </Button>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background/30 p-4">
+                <h4 className="text-sm font-medium mb-2">How it works</h4>
+                <ul className="text-xs text-muted-foreground space-y-1.5">
+                  <li>• Fetches real hourly price candles from Twelve Data for each signal's symbol</li>
+                  <li>• Checks if the price hit Take Profit or Stop Loss after the signal was posted</li>
+                  <li>• Updates each signal's outcome (WIN/LOSS) based on actual market data</li>
+                  <li>• Rate limited to 8 calls per minute to stay within free tier limits</li>
+                  <li>• Results appear on the Dashboard, Analytics, and Signals pages</li>
+                </ul>
               </div>
             </CardContent>
           </Card>
