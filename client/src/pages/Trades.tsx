@@ -2,16 +2,20 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Radio, ArrowRight } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Radio, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTrades, getChannelSignals, getSignals } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { useMemo } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { useMemo, useState } from "react";
 
 export default function Trades() {
   useWebSocket();
-  
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [verifying, setVerifying] = useState(false);
+
   const { data: trades = [], isLoading } = useQuery({
     queryKey: ["activeTrades"],
     queryFn: () => getTrades(true),
@@ -49,6 +53,39 @@ export default function Trades() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title="Active Trades" />
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
+
+          <div className="flex items-center justify-end mb-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7 px-3 text-success border-success/30 hover:bg-success/10 hover:text-success"
+              disabled={verifying}
+              onClick={async () => {
+                setVerifying(true);
+                try {
+                  const resp = await fetch("/api/verify-signals", { method: "POST" });
+                  const data = await resp.json();
+                  if (data.error) {
+                    toast({ title: "Verification Error", description: data.error, variant: "destructive" });
+                  } else {
+                    toast({ title: "Price Verification Started", description: "Checking signals against real market data. Results will update automatically." });
+                    setTimeout(() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/channel-signals"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/signals"] });
+                    }, 10000);
+                  }
+                } catch {
+                  toast({ title: "Error", description: "Failed to start verification.", variant: "destructive" });
+                } finally {
+                  setVerifying(false);
+                }
+              }}
+              data-testid="button-verify-prices-trades"
+            >
+              {verifying ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3 w-3" />}
+              Verify Prices
+            </Button>
+          </div>
 
           <Card className="bg-card/50 backdrop-blur-sm border-border">
             <CardHeader className="flex flex-row items-center justify-between">

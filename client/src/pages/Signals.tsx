@@ -3,11 +3,12 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, ChevronRight, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSignals, getChannelSignals } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useToast } from "@/hooks/use-toast";
 
 type OutcomeFilter = "ALL" | "WIN" | "LOSS" | "PENDING";
 
@@ -24,12 +25,16 @@ interface NormalizedSignal {
   outcome: string;
   pnl: number | null;
   date: Date;
+  verificationNote: string | null;
 }
 
 export default function Signals() {
   useWebSocket();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("ALL");
   const [collapsedChannels, setCollapsedChannels] = useState<Record<string, boolean>>({});
+  const [verifying, setVerifying] = useState(false);
 
   const { data: liveSignals = [], isLoading: loadingLive } = useQuery({
     queryKey: ["signals"],
@@ -57,6 +62,7 @@ export default function Signals() {
         outcome: s.pnl && s.pnl > 0 ? "WIN" : s.pnl && s.pnl < 0 ? "LOSS" : "PENDING",
         pnl: s.pnl,
         date: new Date(s.timestamp),
+        verificationNote: null,
       }));
 
     const channel = channelSignals
@@ -74,6 +80,7 @@ export default function Signals() {
         outcome: s.outcome,
         pnl: null,
         date: new Date(s.messageDate),
+        verificationNote: s.verificationNote || null,
       }));
 
     let list = [...live, ...channel];
@@ -133,24 +140,56 @@ export default function Signals() {
             <p className="text-sm text-muted-foreground">
               Past signals across {channelGroups.length} channel{channelGroups.length !== 1 ? 's' : ''} · {stats.total} resolved
             </p>
-            <div className="flex items-center gap-2">
-              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-              <div className="flex gap-1">
-                {(["ALL", "WIN", "LOSS"] as const).map((f) => (
-                  <Button
-                    key={f}
-                    variant={outcomeFilter === f ? "default" : "outline"}
-                    size="sm"
-                    className="text-xs h-7 px-2.5"
-                    onClick={() => setOutcomeFilter(f)}
-                    data-testid={`filter-${f.toLowerCase()}`}
-                  >
-                    {f === "ALL" ? "All" : f}
-                    {f === "ALL" && <span className="ml-1 text-muted-foreground">({stats.total})</span>}
-                    {f === "WIN" && <span className="ml-1 text-success">({stats.wins})</span>}
-                    {f === "LOSS" && <span className="ml-1 text-destructive">({stats.losses})</span>}
-                  </Button>
-                ))}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7 px-3 text-success border-success/30 hover:bg-success/10 hover:text-success"
+                disabled={verifying}
+                onClick={async () => {
+                  setVerifying(true);
+                  try {
+                    const resp = await fetch("/api/verify-signals", { method: "POST" });
+                    const data = await resp.json();
+                    if (data.error) {
+                      toast({ title: "Verification Error", description: data.error, variant: "destructive" });
+                    } else {
+                      toast({ title: "Price Verification Started", description: "Checking signals against real market data. Results will update automatically." });
+                      setTimeout(() => {
+                        queryClient.invalidateQueries({ queryKey: ["/api/channel-signals"] });
+                        queryClient.invalidateQueries({ queryKey: ["signals"] });
+                      }, 10000);
+                    }
+                  } catch {
+                    toast({ title: "Error", description: "Failed to start verification.", variant: "destructive" });
+                  } finally {
+                    setVerifying(false);
+                  }
+                }}
+                data-testid="button-verify-prices"
+              >
+                {verifying ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3 w-3" />}
+                Verify Prices
+              </Button>
+              <div className="flex items-center gap-2">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <div className="flex gap-1">
+                  {(["ALL", "WIN", "LOSS"] as const).map((f) => (
+                    <Button
+                      key={f}
+                      variant={outcomeFilter === f ? "default" : "outline"}
+                      size="sm"
+                      className="text-xs h-7 px-2.5"
+                      onClick={() => setOutcomeFilter(f)}
+                      data-testid={`filter-${f.toLowerCase()}`}
+                    >
+                      {f === "ALL" ? "All" : f}
+                      {f === "ALL" && <span className="ml-1 text-muted-foreground">({stats.total})</span>}
+                      {f === "WIN" && <span className="ml-1 text-success">({stats.wins})</span>}
+                      {f === "LOSS" && <span className="ml-1 text-destructive">({stats.losses})</span>}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -259,12 +298,22 @@ export default function Signals() {
                                 </div>
 
                                 <div className="flex flex-col items-end gap-0.5 min-w-[70px]">
-                                  <Badge className={`text-[10px] ${statusColor(signal.outcome)}`}>
-                                    {signal.outcome}
-                                  </Badge>
+                                  <div className="flex items-center gap-1">
+                                    <Badge className={`text-[10px] ${statusColor(signal.outcome)}`}>
+                                      {signal.outcome}
+                                    </Badge>
+                                    {signal.verificationNote && (
+                                      <ShieldCheck className="h-3 w-3 text-primary" title={signal.verificationNote} />
+                                    )}
+                                  </div>
                                   <span className="text-[10px] text-muted-foreground font-mono">
                                     {signal.date.toLocaleDateString()}
                                   </span>
+                                  {signal.verificationNote && (
+                                    <span className="text-[9px] text-primary/70 font-mono max-w-[140px] truncate" title={signal.verificationNote}>
+                                      {signal.verificationNote.replace("Price verified: ", "")}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
