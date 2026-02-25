@@ -33,8 +33,10 @@ export default function Settings() {
   const [newChannel, setNewChannel] = useState("");
   const [channels, setChannels] = useState<string[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
-  const [botToken, setBotToken] = useState("");
-  const [showBotToken, setShowBotToken] = useState(false);
+  const [telegramApiId, setTelegramApiId] = useState("");
+  const [telegramApiHash, setTelegramApiHash] = useState("");
+  const [telegramPhone, setTelegramPhone] = useState("");
+  const [showApiHash, setShowApiHash] = useState(false);
 
   useEffect(() => {
     if (settingsData.length > 0) {
@@ -42,7 +44,9 @@ export default function Settings() {
       setMaxRisk(settingsMap["max_risk_percent"] || "2.0");
       setDailyLossLimit(settingsMap["daily_loss_limit"] || "500");
       setAutoBreakEven(settingsMap["auto_break_even"] !== "false");
-      setBotToken(settingsMap["telegram_bot_token"] || "");
+      setTelegramApiId(settingsMap["telegram_api_id"] || "");
+      setTelegramApiHash(settingsMap["telegram_api_hash"] || "");
+      setTelegramPhone(settingsMap["telegram_phone"] || "");
       const channelList = settingsMap["telegram_channels"];
       if (channelList) {
         setChannels(JSON.parse(channelList));
@@ -311,53 +315,82 @@ export default function Settings() {
                 <Bot className="h-5 w-5" />
                 Telegram Configuration
               </CardTitle>
-              <CardDescription>Bot token and source channels for signal parsing</CardDescription>
+              <CardDescription>Userbot credentials and source channels for signal parsing</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="bot-token">Bot Token</Label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="telegram-api-id">API ID</Label>
+                  <Input
+                    id="telegram-api-id"
+                    value={telegramApiId}
+                    onChange={(e) => setTelegramApiId(e.target.value)}
+                    placeholder="e.g. 12345678"
+                    className="bg-background/50 font-mono"
+                    data-testid="input-telegram-api-id"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telegram-api-hash">API Hash</Label>
+                  <div className="relative">
                     <Input
-                      id="bot-token"
-                      type={showBotToken ? "text" : "password"}
-                      value={botToken}
-                      onChange={(e) => setBotToken(e.target.value)}
-                      placeholder="Enter your Telegram bot token"
+                      id="telegram-api-hash"
+                      type={showApiHash ? "text" : "password"}
+                      value={telegramApiHash}
+                      onChange={(e) => setTelegramApiHash(e.target.value)}
+                      placeholder="Enter API hash"
                       className="bg-background/50 font-mono pr-10"
-                      data-testid="input-bot-token"
+                      data-testid="input-telegram-api-hash"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowBotToken(!showBotToken)}
+                      onClick={() => setShowApiHash(!showApiHash)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      data-testid="button-toggle-token-visibility"
+                      data-testid="button-toggle-hash-visibility"
                     >
-                      {showBotToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showApiHash ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <Button
-                    onClick={async () => {
-                      if (!botToken.trim()) {
-                        toast({ title: "Error", description: "Please enter a bot token.", variant: "destructive" });
-                        return;
-                      }
-                      try {
-                        await saveMutation.mutateAsync({ key: "telegram_bot_token", value: botToken.trim() });
-                        toast({ title: "Bot Token Saved", description: "Telegram bot token has been updated." });
-                      } catch (error) {
-                        toast({ title: "Error", description: "Failed to save bot token.", variant: "destructive" });
-                      }
-                    }}
-                    disabled={saveMutation.isPending}
-                    data-testid="button-save-bot-token"
-                  >
-                    {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Save Token
-                  </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Get this from @BotFather on Telegram</p>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="telegram-phone">Phone Number</Label>
+                  <Input
+                    id="telegram-phone"
+                    value={telegramPhone}
+                    onChange={(e) => setTelegramPhone(e.target.value)}
+                    placeholder="e.g. +1234567890"
+                    className="bg-background/50 font-mono"
+                    data-testid="input-telegram-phone"
+                  />
+                  <p className="text-xs text-muted-foreground">Your Telegram account phone number for login</p>
+                </div>
               </div>
+              <div className="pt-2">
+                <Button
+                  onClick={async () => {
+                    if (!telegramApiId.trim() || !telegramApiHash.trim()) {
+                      toast({ title: "Error", description: "API ID and API Hash are required.", variant: "destructive" });
+                      return;
+                    }
+                    try {
+                      await saveMutation.mutateAsync({ key: "telegram_api_id", value: telegramApiId.trim() });
+                      await saveMutation.mutateAsync({ key: "telegram_api_hash", value: telegramApiHash.trim() });
+                      if (telegramPhone.trim()) {
+                        await saveMutation.mutateAsync({ key: "telegram_phone", value: telegramPhone.trim() });
+                      }
+                      toast({ title: "Telegram Settings Saved", description: "API credentials have been updated. Restart the Telegram Listener to apply." });
+                    } catch (error) {
+                      toast({ title: "Error", description: "Failed to save Telegram settings.", variant: "destructive" });
+                    }
+                  }}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-telegram-credentials"
+                >
+                  {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Telegram Credentials
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Get API ID and Hash from <a href="https://my.telegram.org" target="_blank" rel="noopener noreferrer" className="text-primary underline">my.telegram.org</a></p>
 
               <Separator />
 

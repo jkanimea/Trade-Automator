@@ -69,7 +69,7 @@ The system includes Python scripts for external integrations:
 - **PostgreSQL**: Primary data store, connection via `DATABASE_URL` environment variable
 
 ### Third-Party APIs
-- **Telegram Bot API**: Signal source via python-telegram-bot library
+- **Telegram Userbot (Telethon)**: Signal source using user account to monitor channels without needing admin access. Requires API ID, API Hash, and phone number from my.telegram.org
 - **cTrader Open API**: Trade execution (OAuth2 authentication required)
   - Endpoints: `https://api.ctrader.com/oauth2/token`, `/api/v1/accounts/{accountId}/orders`
   - Required env vars: `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_ACCOUNT_ID`

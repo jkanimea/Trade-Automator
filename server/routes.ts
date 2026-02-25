@@ -152,9 +152,10 @@ export async function registerRoutes(
     try {
       const settings = await storage.getSettings();
       const isInternal = req.query.internal === "true" && req.headers.host?.includes("localhost");
+      const sensitiveKeys = ["telegram_bot_token", "telegram_api_hash"];
       const masked = settings.map(s => {
-        if (s.key === "telegram_bot_token" && s.value && !isInternal) {
-          return { ...s, value: s.value.slice(0, 6) + "••••••••••••" + s.value.slice(-4) };
+        if (sensitiveKeys.includes(s.key) && s.value && !isInternal) {
+          return { ...s, value: s.value.slice(0, 4) + "••••••••" + s.value.slice(-4) };
         }
         return s;
       });

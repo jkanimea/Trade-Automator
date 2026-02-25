@@ -7,4 +7,5 @@ dependencies = [
     "aiohttp>=3.13.2",
     "python-telegram-bot>=22.5",
     "requests>=2.32.5",
+    "telethon>=1.42.0",
 ]

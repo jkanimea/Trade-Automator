@@ -1,14 +1,25 @@
 import os
 import re
+import json
 import asyncio
 import aiohttp
-from datetime import datetime
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+import urllib.request
+from telethon import TelegramClient, events
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
+SESSION_FILE = os.path.join(os.path.dirname(__file__), "telegram_session")
 
 SIGNAL_PATTERN = r'🚀?(\w+)\s*-\s*(BUY|SELL)🚀?\s*Entry:\s*([\d.]+)\s*(?:Stopp?-Loss|SL):\s*([\d.]+)\s*(?:Take-Profit|TP)\s*1:\s*([\d.]+)(?:\s*(?:Take-Profit|TP)\s*2:\s*([\d.]+))?(?:\s*(?:Take-Profit|TP)\s*3:\s*([\d.]+))?'
+
+def get_settings_sync():
+    try:
+        req = urllib.request.Request(f"{API_URL}/settings?internal=true")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            settings = json.loads(resp.read().decode())
+            return {s["key"]: s["value"] for s in settings if s.get("key") and s.get("value")}
+    except Exception as e:
+        print(f"Failed to fetch settings from API: {e}")
+    return {}
 
 async def log_to_api(level: str, message: str, metadata: dict = None):
     try:
@@ -25,7 +36,7 @@ async def send_signal_to_api(signal: dict):
     try:
         async with aiohttp.ClientSession() as session:
             response = await session.post(f"{API_URL}/signals", json=signal)
-            if response.status == 200 or response.status == 201:
+            if response.status in (200, 201):
                 data = await response.json()
                 print(f"Signal sent to API: {data}")
                 await log_to_api("SUCCESS", f"Signal forwarded to API: {signal['symbol']} {signal['direction']}")
@@ -37,82 +48,106 @@ async def send_signal_to_api(signal: dict):
         print(f"Error sending signal: {e}")
         await log_to_api("ERROR", f"Error sending signal to API: {str(e)}")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    text = update.message.text
-    chat_title = update.message.chat.title or "Unknown"
-    print(f"[{chat_title}] Received message: {text[:100]}...")
-
-    await log_to_api("INFO", f"Telegram Listener: Message received from \"{chat_title}\"")
-
+def parse_signal(text: str):
     match = re.search(SIGNAL_PATTERN, text, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
 
-    if match:
-        symbol = match.group(1).upper()
-        direction = match.group(2).upper()
-        entry = float(match.group(3))
-        stop_loss = float(match.group(4))
-        tp1 = float(match.group(5))
+    symbol = match.group(1).upper()
+    direction = match.group(2).upper()
+    entry = float(match.group(3))
+    stop_loss = float(match.group(4))
+    tp1 = float(match.group(5))
 
-        take_profits = [tp1]
-        if match.group(6):
-            take_profits.append(float(match.group(6)))
-        if match.group(7):
-            take_profits.append(float(match.group(7)))
+    take_profits = [tp1]
+    if match.group(6):
+        take_profits.append(float(match.group(6)))
+    if match.group(7):
+        take_profits.append(float(match.group(7)))
 
-        signal = {
-            "telegramMessageId": str(update.message.message_id),
-            "symbol": symbol,
-            "direction": direction,
-            "entry": entry,
-            "stopLoss": stop_loss,
-            "takeProfits": take_profits,
-            "status": "PENDING"
-        }
+    return {
+        "symbol": symbol,
+        "direction": direction,
+        "entry": entry,
+        "stopLoss": stop_loss,
+        "takeProfits": take_profits,
+        "status": "PENDING"
+    }
 
-        print(f"Signal detected: {symbol} {direction} @ {entry}")
-        await log_to_api("INFO", f"Signal Parser: Detected \"{symbol} - {direction}\" Entry: {entry}, SL: {stop_loss}, TPs: {take_profits}")
+async def main():
+    settings = get_settings_sync()
 
-        await send_signal_to_api(signal)
-    else:
-        print(f"No signal pattern found in message")
-        await log_to_api("DEBUG", "No valid signal pattern found in message")
+    api_id = os.getenv("TELEGRAM_API_ID") or settings.get("telegram_api_id")
+    api_hash = os.getenv("TELEGRAM_API_HASH") or settings.get("telegram_api_hash")
+    phone = os.getenv("TELEGRAM_PHONE") or settings.get("telegram_phone")
 
-def get_bot_token_sync():
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if token:
-        return token
-    import urllib.request
-    import json
+    monitored_channels_raw = settings.get("telegram_channels", "[]")
     try:
-        req = urllib.request.Request(f"{API_URL}/settings?internal=true")
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            settings = json.loads(resp.read().decode())
-            for s in settings:
-                if s.get("key") == "telegram_bot_token" and s.get("value"):
-                    return s["value"]
-    except Exception as e:
-        print(f"Failed to fetch token from API: {e}")
-    return None
+        monitored_channels = json.loads(monitored_channels_raw)
+    except json.JSONDecodeError:
+        monitored_channels = []
 
-def main():
-    bot_token = get_bot_token_sync()
-
-    if not bot_token:
-        print("ERROR: TELEGRAM_BOT_TOKEN not set in environment or settings")
-        print("Set it in Settings > Telegram Configuration on the dashboard.")
+    if not api_id or not api_hash:
+        print("ERROR: TELEGRAM_API_ID and TELEGRAM_API_HASH are required.")
+        print("Set them in Settings > Telegram Configuration on the dashboard.")
+        await log_to_api("ERROR", "Telegram API ID and API Hash not configured. Set them in Settings > Telegram Configuration.")
         return
 
-    print(f"Bot token found (ending in ...{bot_token[-4:]})")
-    print("Starting Telegram bot...")
+    api_id = int(api_id)
 
-    application = Application.builder().token(bot_token).build()
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    print(f"API ID: {api_id}")
+    print(f"API Hash: {api_hash[:6]}...{api_hash[-4:]}")
+    if phone:
+        print(f"Phone: {phone[:4]}...{phone[-2:]}")
+    print(f"Monitored channels: {monitored_channels}")
 
-    print("Telegram bot started. Listening for signals...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    client = TelegramClient(SESSION_FILE, api_id, api_hash)
+
+    await client.start(phone=phone if phone else lambda: input("Enter your phone number: "))
+
+    me = await client.get_me()
+    print(f"Logged in as: {me.first_name} (@{me.username})")
+    await log_to_api("SUCCESS", f"Telegram Listener: Logged in as {me.first_name} (@{me.username})")
+
+    resolved_channels = []
+    for ch in monitored_channels:
+        try:
+            entity = await client.get_entity(ch)
+            resolved_channels.append(entity.id)
+            print(f"Resolved channel: {ch} -> {entity.id} ({getattr(entity, 'title', ch)})")
+            await log_to_api("INFO", f"Telegram Listener: Monitoring channel \"{getattr(entity, 'title', ch)}\"")
+        except Exception as e:
+            print(f"Failed to resolve channel '{ch}': {e}")
+            await log_to_api("ERROR", f"Telegram Listener: Failed to resolve channel \"{ch}\": {str(e)}")
+
+    @client.on(events.NewMessage())
+    async def handler(event):
+        chat = await event.get_chat()
+        chat_title = getattr(chat, 'title', 'Private')
+        chat_id = event.chat_id
+
+        if resolved_channels and chat_id not in resolved_channels:
+            return
+
+        text = event.raw_text
+        if not text:
+            return
+
+        print(f"[{chat_title}] {text[:100]}...")
+        await log_to_api("INFO", f"Telegram Listener: Message from \"{chat_title}\"")
+
+        signal = parse_signal(text)
+        if signal:
+            signal["telegramMessageId"] = str(event.id)
+            print(f"SIGNAL DETECTED: {signal['symbol']} {signal['direction']} @ {signal['entry']}")
+            await log_to_api("INFO", f"Signal Parser: Detected \"{signal['symbol']} - {signal['direction']}\" Entry: {signal['entry']}, SL: {signal['stopLoss']}, TPs: {signal['takeProfits']}")
+            await send_signal_to_api(signal)
+        else:
+            print(f"No signal pattern in message")
+
+    print("Telegram userbot started. Listening for signals...")
+    await log_to_api("SUCCESS", "Telegram Listener: Connected and monitoring channels")
+    await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
