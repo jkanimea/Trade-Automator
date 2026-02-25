@@ -151,7 +151,14 @@ export async function registerRoutes(
   app.get("/api/settings", async (req, res) => {
     try {
       const settings = await storage.getSettings();
-      res.json(settings);
+      const isInternal = req.query.internal === "true" && req.headers.host?.includes("localhost");
+      const masked = settings.map(s => {
+        if (s.key === "telegram_bot_token" && s.value && !isInternal) {
+          return { ...s, value: s.value.slice(0, 6) + "••••••••••••" + s.value.slice(-4) };
+        }
+        return s;
+      });
+      res.json(masked);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

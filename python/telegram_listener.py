@@ -8,11 +8,9 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 
-# Telegram signal pattern matching
 SIGNAL_PATTERN = r'🚀?(\w+)\s*-\s*(BUY|SELL)🚀?\s*Entry:\s*([\d.]+)\s*(?:Stopp?-Loss|SL):\s*([\d.]+)\s*(?:Take-Profit|TP)\s*1:\s*([\d.]+)(?:\s*(?:Take-Profit|TP)\s*2:\s*([\d.]+))?(?:\s*(?:Take-Profit|TP)\s*3:\s*([\d.]+))?'
 
 async def log_to_api(level: str, message: str, metadata: dict = None):
-    """Send log to Node.js API"""
     try:
         async with aiohttp.ClientSession() as session:
             await session.post(f"{API_URL}/logs", json={
@@ -24,111 +22,97 @@ async def log_to_api(level: str, message: str, metadata: dict = None):
         print(f"Failed to log to API: {e}")
 
 async def send_signal_to_api(signal: dict):
-    """Send parsed signal to Node.js API"""
     try:
         async with aiohttp.ClientSession() as session:
             response = await session.post(f"{API_URL}/signals", json=signal)
-            if response.status == 200:
+            if response.status == 200 or response.status == 201:
                 data = await response.json()
-                await log_to_api("SUCCESS", f"Signal created: {signal['symbol']} {signal['direction']}", {"signal_id": data.get('id')})
-                return data
+                print(f"Signal sent to API: {data}")
+                await log_to_api("SUCCESS", f"Signal forwarded to API: {signal['symbol']} {signal['direction']}")
             else:
-                error = await response.text()
-                await log_to_api("ERROR", f"Failed to create signal: {error}")
+                text = await response.text()
+                print(f"API error: {response.status} - {text}")
+                await log_to_api("ERROR", f"Failed to send signal to API: {response.status}")
     except Exception as e:
-        await log_to_api("ERROR", f"Failed to send signal to API: {str(e)}")
-        print(f"Error sending signal to API: {e}")
-
-def parse_signal(text: str) -> dict | None:
-    """Parse Telegram message for trading signal"""
-    match = re.search(SIGNAL_PATTERN, text, re.IGNORECASE | re.MULTILINE)
-    if not match:
-        return None
-    
-    symbol = match.group(1).upper()
-    direction = match.group(2).upper()
-    entry = float(match.group(3))
-    stop_loss = float(match.group(4))
-    tp1 = float(match.group(5))
-    tp2 = float(match.group(6)) if match.group(6) else None
-    tp3 = float(match.group(7)) if match.group(7) else None
-    
-    take_profits = [tp1]
-    if tp2:
-        take_profits.append(tp2)
-    if tp3:
-        take_profits.append(tp3)
-    
-    return {
-        "symbol": symbol,
-        "direction": direction,
-        "entry": entry,
-        "stopLoss": stop_loss,
-        "takeProfits": take_profits,
-        "status": "PENDING",
-        "telegramMessageId": None
-    }
+        print(f"Error sending signal: {e}")
+        await log_to_api("ERROR", f"Error sending signal to API: {str(e)}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming Telegram messages"""
     if not update.message or not update.message.text:
         return
-    
+
     text = update.message.text
-    message_id = str(update.message.message_id)
-    
-    await log_to_api("INFO", f"Telegram: Received message from channel", {"message_id": message_id})
-    
-    # Parse signal
-    signal = parse_signal(text)
-    if signal:
-        signal["telegramMessageId"] = message_id
-        await log_to_api("INFO", f"Signal Parser: Detected pattern \"{signal['symbol']} - {signal['direction']}\"")
-        
-        # Send to API
+    chat_title = update.message.chat.title or "Unknown"
+    print(f"[{chat_title}] Received message: {text[:100]}...")
+
+    await log_to_api("INFO", f"Telegram Listener: Message received from \"{chat_title}\"")
+
+    match = re.search(SIGNAL_PATTERN, text, re.IGNORECASE | re.DOTALL)
+
+    if match:
+        symbol = match.group(1).upper()
+        direction = match.group(2).upper()
+        entry = float(match.group(3))
+        stop_loss = float(match.group(4))
+        tp1 = float(match.group(5))
+
+        take_profits = [tp1]
+        if match.group(6):
+            take_profits.append(float(match.group(6)))
+        if match.group(7):
+            take_profits.append(float(match.group(7)))
+
+        signal = {
+            "telegramMessageId": str(update.message.message_id),
+            "symbol": symbol,
+            "direction": direction,
+            "entry": entry,
+            "stopLoss": stop_loss,
+            "takeProfits": take_profits,
+            "status": "PENDING"
+        }
+
+        print(f"Signal detected: {symbol} {direction} @ {entry}")
+        await log_to_api("INFO", f"Signal Parser: Detected \"{symbol} - {direction}\" Entry: {entry}, SL: {stop_loss}, TPs: {take_profits}")
+
         await send_signal_to_api(signal)
     else:
+        print(f"No signal pattern found in message")
         await log_to_api("DEBUG", "No valid signal pattern found in message")
 
-async def get_bot_token():
-    """Get bot token from environment or database settings"""
+def get_bot_token_sync():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if token:
         return token
+    import urllib.request
+    import json
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_URL}/settings") as resp:
-                if resp.status == 200:
-                    settings = await resp.json()
-                    for s in settings:
-                        if s.get("key") == "telegram_bot_token" and s.get("value"):
-                            return s["value"]
-    except Exception:
-        pass
+        req = urllib.request.Request(f"{API_URL}/settings?internal=true")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            settings = json.loads(resp.read().decode())
+            for s in settings:
+                if s.get("key") == "telegram_bot_token" and s.get("value"):
+                    return s["value"]
+    except Exception as e:
+        print(f"Failed to fetch token from API: {e}")
     return None
 
-async def main():
-    """Start Telegram listener"""
-    bot_token = await get_bot_token()
-    
+def main():
+    bot_token = get_bot_token_sync()
+
     if not bot_token:
         print("ERROR: TELEGRAM_BOT_TOKEN not set in environment or settings")
-        await log_to_api("ERROR", "Telegram bot token not configured. Set it in Settings > Telegram Configuration.")
+        print("Set it in Settings > Telegram Configuration on the dashboard.")
         return
-    
-    await log_to_api("INFO", "Telegram Listener: Starting up...")
-    
-    # Create application
+
+    print(f"Bot token found (ending in ...{bot_token[-4:]})")
+    print("Starting Telegram bot...")
+
     application = Application.builder().token(bot_token).build()
-    
-    # Add message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    await log_to_api("SUCCESS", "Telegram Listener: Connected and monitoring channels")
-    
-    # Start polling
+
     print("Telegram bot started. Listening for signals...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
