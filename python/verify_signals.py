@@ -4,6 +4,7 @@ import json
 import time
 import asyncio
 import urllib.request
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
@@ -46,16 +47,16 @@ def fetch_candles(symbol, start_date, end_date, interval="1h"):
     start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
     end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
 
-    url = (
-        f"https://api.twelvedata.com/time_series"
-        f"?symbol={td_symbol}"
-        f"&interval={interval}"
-        f"&start_date={start_str}"
-        f"&end_date={end_str}"
-        f"&apikey={TWELVE_DATA_KEY}"
-        f"&format=JSON"
-        f"&outputsize=500"
-    )
+    params = urllib.parse.urlencode({
+        "symbol": td_symbol,
+        "interval": interval,
+        "start_date": start_str,
+        "end_date": end_str,
+        "apikey": TWELVE_DATA_KEY,
+        "format": "JSON",
+        "outputsize": "500",
+    })
+    url = f"https://api.twelvedata.com/time_series?{params}"
 
     try:
         req = urllib.request.Request(url)
@@ -63,8 +64,19 @@ def fetch_candles(symbol, start_date, end_date, interval="1h"):
             data = json.loads(resp.read().decode())
 
         if data.get("status") == "error":
-            print(f"  API Error: {data.get('message', 'Unknown error')}")
-            return None
+            msg = data.get('message', 'Unknown error')
+            if "API credits" in msg or "rate" in msg.lower():
+                print(f"  Rate limited, waiting 60s...")
+                time.sleep(60)
+                req2 = urllib.request.Request(url)
+                with urllib.request.urlopen(req2, timeout=15) as resp2:
+                    data = json.loads(resp2.read().decode())
+                if data.get("status") == "error":
+                    print(f"  API Error after retry: {data.get('message', 'Unknown error')}")
+                    return None
+            else:
+                print(f"  API Error: {msg}")
+                return None
 
         values = data.get("values", [])
         if not values:
@@ -273,6 +285,10 @@ def main():
                 print("  WARNING: Approaching API rate limit (800/day). Stopping.")
                 log_to_api("WARNING", "Price Verification: Approaching daily API rate limit, pausing")
                 break
+
+            if api_calls > 0 and api_calls % 7 == 0:
+                print(f"  Pausing 65s to respect rate limit (8 calls/min)...")
+                time.sleep(65)
 
             candles = fetch_candles(symbol, fetch_start, fetch_end, interval="1h")
             api_calls += 1
