@@ -269,13 +269,7 @@ export async function registerRoutes(
   app.post("/api/verify-signals", async (req, res) => {
     try {
       const { exec } = await import("child_process");
-      const settings = await storage.getSettings();
-      const env = { ...process.env };
-      const twelveKey = settings.find(s => s.key === "twelve_data_api_key")?.value;
-      if (twelveKey) env.TWELVE_DATA_API_KEY = twelveKey;
-      const finnhubKey = settings.find(s => s.key === "finnhub_api_key")?.value;
-      if (finnhubKey) env.FINNHUB_API_KEY = finnhubKey;
-      exec("python python/verify_signals.py", { env, cwd: process.cwd() }, (error, stdout, stderr) => {
+      exec("python python/verify_signals.py", { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
         if (error) {
           console.error("Verification error:", stderr);
         }

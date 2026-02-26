@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play, ShieldCheck, ExternalLink, Zap } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play, ShieldCheck, ExternalLink, Zap, GripVertical, ChevronUp, ChevronDown } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -41,11 +41,24 @@ export default function Settings() {
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingId, setEditingId] = useState("");
-  const [twelveDataApiKey, setTwelveDataApiKey] = useState("");
-  const [showTwelveDataKey, setShowTwelveDataKey] = useState(false);
-  const [finnhubApiKey, setFinnhubApiKey] = useState("");
-  const [showFinnhubKey, setShowFinnhubKey] = useState(false);
   const [runningVerification, setRunningVerification] = useState(false);
+
+  interface PriceProvider {
+    id: string;
+    name: string;
+    apiKey: string;
+    requiresKey: boolean;
+    url: string;
+    description: string;
+  }
+
+  const [providers, setProviders] = useState<PriceProvider[]>([
+    { id: "yfinance", name: "Yahoo Finance", apiKey: "", requiresKey: false, url: "", description: "Free, unlimited, no API key needed" },
+  ]);
+  const [showKeyFor, setShowKeyFor] = useState<Record<string, boolean>>({});
+  const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  const [addingProvider, setAddingProvider] = useState(false);
+  const [newProvider, setNewProvider] = useState<PriceProvider>({ id: "", name: "", apiKey: "", requiresKey: true, url: "", description: "" });
 
   useEffect(() => {
     if (settingsData.length > 0) {
@@ -56,8 +69,15 @@ export default function Settings() {
       setTelegramApiId(settingsMap["telegram_api_id"] || "");
       setTelegramApiHash(settingsMap["telegram_api_hash"] || "");
       setTelegramPhone(settingsMap["telegram_phone"] || "");
-      setTwelveDataApiKey(settingsMap["twelve_data_api_key"] || "");
-      setFinnhubApiKey(settingsMap["finnhub_api_key"] || "");
+      const savedProviders = settingsMap["price_providers"];
+      if (savedProviders) {
+        try {
+          const parsed = JSON.parse(savedProviders);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setProviders(parsed);
+          }
+        } catch {}
+      }
       const channelList = settingsMap["telegram_channels"];
       if (channelList) {
         const parsed = JSON.parse(channelList);
@@ -574,197 +594,334 @@ export default function Settings() {
                 <BarChart3 className="h-5 w-5" />
                 Price Verification Providers
               </CardTitle>
-              <CardDescription>Configure data providers for verifying signal outcomes against real market prices. If one fails, the next is tried automatically.</CardDescription>
+              <CardDescription>Add up to 5 data providers. They are tried in order — if one fails, the next is used automatically.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
 
-              <div className="grid gap-3">
-                <div className="rounded-lg border-2 border-success/40 bg-success/5 p-4" data-testid="provider-card-yahoo">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-success/20 flex items-center justify-center">
-                        <Zap className="h-4.5 w-4.5 text-success" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold">Yahoo Finance</h4>
-                          <span className="text-[10px] font-mono bg-success/20 text-success px-1.5 py-0.5 rounded">PRIMARY</span>
+              <div className="grid gap-2">
+                {providers.map((prov, idx) => {
+                  const isEditing = editingProvider === prov.id;
+                  const isReady = !prov.requiresKey || !!prov.apiKey;
+                  return (
+                    <div
+                      key={prov.id}
+                      className={`rounded-lg border p-3 transition-colors ${isReady ? 'border-success/30 bg-success/5' : 'border-border bg-background/30'}`}
+                      data-testid={`provider-card-${prov.id}`}
+                    >
+                      {isEditing ? (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[11px]">Provider Name</Label>
+                              <Input
+                                value={prov.name}
+                                onChange={(e) => setProviders(prev => prev.map(p => p.id === prov.id ? { ...p, name: e.target.value } : p))}
+                                className="bg-background/50 font-mono text-xs h-8 mt-1"
+                                data-testid={`input-provider-name-${prov.id}`}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px]">Provider ID</Label>
+                              <Input
+                                value={prov.id}
+                                onChange={(e) => {
+                                  const newId = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+                                  setProviders(prev => prev.map(p => p.id === prov.id ? { ...p, id: newId } : p));
+                                  setEditingProvider(newId);
+                                }}
+                                className="bg-background/50 font-mono text-xs h-8 mt-1"
+                                data-testid={`input-provider-id-${prov.id}`}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Description</Label>
+                            <Input
+                              value={prov.description}
+                              onChange={(e) => setProviders(prev => prev.map(p => p.id === prov.id ? { ...p, description: e.target.value } : p))}
+                              className="bg-background/50 text-xs h-8 mt-1"
+                              placeholder="e.g. Free tier: 800/day"
+                              data-testid={`input-provider-desc-${prov.id}`}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[11px]">Signup URL (optional)</Label>
+                              <Input
+                                value={prov.url}
+                                onChange={(e) => setProviders(prev => prev.map(p => p.id === prov.id ? { ...p, url: e.target.value } : p))}
+                                className="bg-background/50 font-mono text-xs h-8 mt-1"
+                                placeholder="https://..."
+                                data-testid={`input-provider-url-${prov.id}`}
+                              />
+                            </div>
+                            <div className="flex items-end gap-2 pb-0.5">
+                              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={prov.requiresKey}
+                                  onChange={(e) => setProviders(prev => prev.map(p => p.id === prov.id ? { ...p, requiresKey: e.target.checked } : p))}
+                                  className="rounded"
+                                />
+                                Requires API key
+                              </label>
+                            </div>
+                          </div>
+                          {prov.requiresKey && (
+                            <div>
+                              <Label className="text-[11px]">API Key</Label>
+                              <div className="relative mt-1">
+                                <Input
+                                  type={showKeyFor[prov.id] ? "text" : "password"}
+                                  value={prov.apiKey}
+                                  onChange={(e) => setProviders(prev => prev.map(p => p.id === prov.id ? { ...p, apiKey: e.target.value } : p))}
+                                  className="bg-background/50 font-mono text-xs h-8 pr-10"
+                                  placeholder="Paste API key"
+                                  data-testid={`input-provider-key-${prov.id}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowKeyFor(prev => ({ ...prev, [prov.id]: !prev[prov.id] }))}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                  {showKeyFor[prov.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex justify-end gap-2 pt-1">
+                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingProvider(null)} data-testid={`button-cancel-edit-${prov.id}`}>
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={!prov.id.trim() || !prov.name.trim() || providers.filter(p => p.id === prov.id).length > 1}
+                              onClick={async () => {
+                                if (providers.filter(p => p.id === prov.id).length > 1) {
+                                  toast({ title: "Duplicate ID", description: "Each provider must have a unique ID.", variant: "destructive" });
+                                  return;
+                                }
+                                setEditingProvider(null);
+                                try {
+                                  await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(providers) });
+                                  toast({ title: "Provider Saved", description: `${prov.name} updated.` });
+                                } catch {
+                                  toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+                                }
+                              }}
+                              data-testid={`button-save-provider-${prov.id}`}
+                            >
+                              <Check className="h-3 w-3 mr-1" /> Save
+                            </Button>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-muted-foreground">Free, unlimited, no API key required</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                      <span className="text-xs font-mono text-success">Active</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-[11px] text-muted-foreground font-mono">
-                    <span>Forex pairs</span>
-                    <span className="text-border">|</span>
-                    <span>Gold/Silver futures</span>
-                    <span className="text-border">|</span>
-                    <span>Indices (futures)</span>
-                    <span className="text-border">|</span>
-                    <span>Crypto</span>
-                  </div>
-                </div>
-
-                <div className={`rounded-lg border p-4 transition-colors ${finnhubApiKey ? 'border-primary/40 bg-primary/5' : 'border-border bg-background/30'}`} data-testid="provider-card-finnhub">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${finnhubApiKey ? 'bg-primary/20' : 'bg-muted'}`}>
-                        <ShieldCheck className={`h-4.5 w-4.5 ${finnhubApiKey ? 'text-primary' : 'text-muted-foreground'}`} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold">Finnhub</h4>
-                          <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded">FALLBACK #1</span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">Free tier: 60 calls/min</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {finnhubApiKey ? (
-                        <>
-                          <div className="h-2 w-2 rounded-full bg-primary" />
-                          <span className="text-xs font-mono text-primary">Ready</span>
-                        </>
                       ) : (
-                        <>
-                          <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                          <span className="text-xs font-mono text-muted-foreground">No key</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Input
-                        id="finnhub-key"
-                        type={showFinnhubKey ? "text" : "password"}
-                        value={finnhubApiKey}
-                        onChange={(e) => setFinnhubApiKey(e.target.value)}
-                        placeholder="Paste your Finnhub API key"
-                        className="bg-background/50 font-mono text-xs h-8 pr-20"
-                        data-testid="input-finnhub-key"
-                      />
-                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setShowFinnhubKey(!showFinnhubKey)}
-                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                          data-testid="button-toggle-finnhub-visibility"
-                        >
-                          {showFinnhubKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <a href="https://finnhub.io/register" target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline flex items-center gap-1" data-testid="link-finnhub-signup">
-                        Get free API key <ExternalLink className="h-3 w-3" />
-                      </a>
-                      {finnhubApiKey.trim() && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 text-[11px] px-2"
-                          onClick={async () => {
-                            try {
-                              await saveMutation.mutateAsync({ key: "finnhub_api_key", value: finnhubApiKey.trim() });
-                              toast({ title: "Saved", description: "Finnhub API key saved." });
-                            } catch {
-                              toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
-                            }
-                          }}
-                          disabled={saveMutation.isPending}
-                          data-testid="button-save-finnhub-key"
-                        >
-                          {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
-                          Save
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <button
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-20"
+                              disabled={idx === 0}
+                              onClick={async () => {
+                                const arr = [...providers];
+                                [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                setProviders(arr);
+                                try {
+                                  await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(arr) });
+                                } catch {}
+                              }}
+                              data-testid={`button-move-up-${prov.id}`}
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-20"
+                              disabled={idx === providers.length - 1}
+                              onClick={async () => {
+                                const arr = [...providers];
+                                [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                setProviders(arr);
+                                try {
+                                  await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(arr) });
+                                } catch {}
+                              }}
+                              data-testid={`button-move-down-${prov.id}`}
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
 
-                <div className={`rounded-lg border p-4 transition-colors ${twelveDataApiKey ? 'border-primary/40 bg-primary/5' : 'border-border bg-background/30'}`} data-testid="provider-card-twelvedata">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${twelveDataApiKey ? 'bg-primary/20' : 'bg-muted'}`}>
-                        <BarChart3 className={`h-4.5 w-4.5 ${twelveDataApiKey ? 'text-primary' : 'text-muted-foreground'}`} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold">Twelve Data</h4>
-                          <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded">FALLBACK #2</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-semibold truncate">{prov.name}</h4>
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${idx === 0 ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}`}>
+                                {idx === 0 ? 'PRIMARY' : `#${idx + 1}`}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate">{prov.description || prov.id}</p>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isReady ? (
+                              <>
+                                <div className="h-2 w-2 rounded-full bg-success" />
+                                <span className="text-[11px] font-mono text-success">Ready</span>
+                              </>
+                            ) : (
+                              <>
+                                <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                                <span className="text-[11px] font-mono text-muted-foreground">No key</span>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {prov.url && (
+                              <a href={prov.url} target="_blank" rel="noopener noreferrer" className="p-1 text-muted-foreground hover:text-primary" data-testid={`link-provider-url-${prov.id}`}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                            <button
+                              className="p-1 text-muted-foreground hover:text-foreground"
+                              onClick={() => setEditingProvider(prov.id)}
+                              data-testid={`button-edit-provider-${prov.id}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              className="p-1 text-muted-foreground hover:text-destructive"
+                              onClick={async () => {
+                                const updated = providers.filter(p => p.id !== prov.id);
+                                setProviders(updated);
+                                try {
+                                  await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(updated) });
+                                  toast({ title: "Removed", description: `${prov.name} removed.` });
+                                } catch {
+                                  toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+                                }
+                              }}
+                              data-testid={`button-delete-provider-${prov.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-muted-foreground">Free tier: 800/day, 8/min</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {twelveDataApiKey ? (
-                        <>
-                          <div className="h-2 w-2 rounded-full bg-primary" />
-                          <span className="text-xs font-mono text-primary">Ready</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                          <span className="text-xs font-mono text-muted-foreground">No key</span>
-                        </>
                       )}
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Input
-                        id="twelve-data-key"
-                        type={showTwelveDataKey ? "text" : "password"}
-                        value={twelveDataApiKey}
-                        onChange={(e) => setTwelveDataApiKey(e.target.value)}
-                        placeholder="Paste your Twelve Data API key"
-                        className="bg-background/50 font-mono text-xs h-8 pr-20"
-                        data-testid="input-twelve-data-key"
-                      />
-                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setShowTwelveDataKey(!showTwelveDataKey)}
-                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                          data-testid="button-toggle-twelve-data-visibility"
-                        >
-                          {showTwelveDataKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <a href="https://twelvedata.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline flex items-center gap-1" data-testid="link-twelvedata-signup">
-                        Get free API key <ExternalLink className="h-3 w-3" />
-                      </a>
-                      {twelveDataApiKey.trim() && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 text-[11px] px-2"
-                          onClick={async () => {
-                            try {
-                              await saveMutation.mutateAsync({ key: "twelve_data_api_key", value: twelveDataApiKey.trim() });
-                              toast({ title: "Saved", description: "Twelve Data API key saved." });
-                            } catch {
-                              toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
-                            }
-                          }}
-                          disabled={saveMutation.isPending}
-                          data-testid="button-save-twelve-data-key"
-                        >
-                          {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
-                          Save
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
+
+              {addingProvider ? (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <h4 className="text-sm font-medium">Add Provider</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px]">Provider Name</Label>
+                      <Input
+                        value={newProvider.name}
+                        onChange={(e) => setNewProvider(prev => ({ ...prev, name: e.target.value }))}
+                        className="bg-background/50 text-xs h-8 mt-1"
+                        placeholder="e.g. Alpha Vantage"
+                        data-testid="input-new-provider-name"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px]">Provider ID</Label>
+                      <Input
+                        value={newProvider.id}
+                        onChange={(e) => setNewProvider(prev => ({ ...prev, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") }))}
+                        className="bg-background/50 font-mono text-xs h-8 mt-1"
+                        placeholder="e.g. alphavantage"
+                        data-testid="input-new-provider-id"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Description</Label>
+                    <Input
+                      value={newProvider.description}
+                      onChange={(e) => setNewProvider(prev => ({ ...prev, description: e.target.value }))}
+                      className="bg-background/50 text-xs h-8 mt-1"
+                      placeholder="e.g. Free tier: 500 calls/day"
+                      data-testid="input-new-provider-desc"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[11px]">Signup URL (optional)</Label>
+                      <Input
+                        value={newProvider.url}
+                        onChange={(e) => setNewProvider(prev => ({ ...prev, url: e.target.value }))}
+                        className="bg-background/50 font-mono text-xs h-8 mt-1"
+                        placeholder="https://..."
+                        data-testid="input-new-provider-url"
+                      />
+                    </div>
+                    <div className="flex items-end gap-2 pb-0.5">
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newProvider.requiresKey}
+                          onChange={(e) => setNewProvider(prev => ({ ...prev, requiresKey: e.target.checked }))}
+                          className="rounded"
+                        />
+                        Requires API key
+                      </label>
+                    </div>
+                  </div>
+                  {newProvider.requiresKey && (
+                    <div>
+                      <Label className="text-[11px]">API Key</Label>
+                      <Input
+                        type="password"
+                        value={newProvider.apiKey}
+                        onChange={(e) => setNewProvider(prev => ({ ...prev, apiKey: e.target.value }))}
+                        className="bg-background/50 font-mono text-xs h-8 mt-1"
+                        placeholder="Paste API key"
+                        data-testid="input-new-provider-key"
+                      />
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddingProvider(false); setNewProvider({ id: "", name: "", apiKey: "", requiresKey: true, url: "", description: "" }); }} data-testid="button-cancel-add-provider">
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={!newProvider.name.trim() || !newProvider.id.trim() || providers.some(p => p.id === newProvider.id)}
+                      onClick={async () => {
+                        const updated = [...providers, newProvider];
+                        setProviders(updated);
+                        setAddingProvider(false);
+                        setNewProvider({ id: "", name: "", apiKey: "", requiresKey: true, url: "", description: "" });
+                        try {
+                          await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(updated) });
+                          toast({ title: "Provider Added", description: `${newProvider.name} added to the chain.` });
+                        } catch {
+                          toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+                        }
+                      }}
+                      data-testid="button-confirm-add-provider"
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add Provider
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  disabled={providers.length >= 5}
+                  onClick={() => setAddingProvider(true)}
+                  data-testid="button-add-provider"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  {providers.length >= 5 ? "Maximum 5 providers" : "Add Provider"}
+                </Button>
+              )}
 
               <Separator />
 
@@ -794,7 +951,7 @@ export default function Settings() {
                       setRunningVerification(false);
                     }
                   }}
-                  disabled={runningVerification}
+                  disabled={runningVerification || providers.length === 0}
                   data-testid="button-run-verification"
                 >
                   {runningVerification ? (
@@ -809,11 +966,10 @@ export default function Settings() {
               <div className="rounded-lg border border-border bg-background/30 p-4">
                 <h4 className="text-sm font-medium mb-2">How it works</h4>
                 <ul className="text-xs text-muted-foreground space-y-1.5">
-                  <li>• Tries Yahoo Finance first (free, unlimited, no key needed)</li>
-                  <li>• If Yahoo fails, automatically tries Finnhub, then Twelve Data</li>
-                  <li>• Fetches real hourly price candles for each signal's symbol and date</li>
-                  <li>• Checks if price hit Take Profit or Stop Loss after signal was posted</li>
-                  <li>• Updates each signal's outcome (WIN/LOSS) based on actual market data</li>
+                  <li>• Providers are tried in the order shown above (top = first)</li>
+                  <li>• If a provider fails or returns no data, the next one is tried</li>
+                  <li>• Use the arrows to reorder providers in your preferred priority</li>
+                  <li>• Providers without a required API key will be skipped</li>
                   <li>• Each verified signal shows which provider was used</li>
                 </ul>
               </div>

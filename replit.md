@@ -82,13 +82,8 @@ The system includes Python scripts for external integrations:
 - `recharts`: Dashboard charting
 - `zod` / `drizzle-zod`: Schema validation
 
-### Price Verification (Multi-Provider Fallback)
-Signal verification uses a cascading provider chain:
-1. **Yahoo Finance (yfinance)**: Primary — free, no API key, unlimited calls
-2. **Finnhub**: Fallback — free tier (60 calls/min), optional API key
-3. **Twelve Data**: Fallback — free tier (800/day, 8/min), optional API key
-
-If one provider fails or returns no data, the next one is tried automatically.
+### Price Verification (Dynamic Multi-Provider Fallback)
+Signal verification uses a fully dynamic provider chain stored in the `price_providers` settings key as JSON. Users can add, edit, delete, and reorder up to 5 providers via Settings UI. Built-in fetcher support: `yfinance`, `finnhub`, `twelvedata`. Providers are tried in configured order; if one fails, the next is used automatically. Providers requiring an API key are skipped if no key is set.
 
 ### Python Dependencies
 - `python-telegram-bot`: Telegram integration

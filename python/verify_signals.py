@@ -25,8 +25,33 @@ def get_setting(key):
     return ""
 
 
-TWELVE_DATA_KEY = get_setting("twelve_data_api_key") or os.getenv("TWELVE_DATA_API_KEY", "")
-FINNHUB_KEY = get_setting("finnhub_api_key") or os.getenv("FINNHUB_API_KEY", "")
+def load_providers_config():
+    try:
+        req = urllib.request.Request(f"{API_URL}/settings?internal=true")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            settings = json.loads(resp.read().decode())
+            for s in settings:
+                if s.get("key") == "price_providers" and s.get("value"):
+                    return json.loads(s["value"])
+    except:
+        pass
+    return [{"id": "yfinance", "name": "Yahoo Finance", "apiKey": "", "requiresKey": False}]
+
+PROVIDERS_CONFIG = load_providers_config()
+
+def get_provider_key(provider_id):
+    for p in PROVIDERS_CONFIG:
+        if p.get("id") == provider_id:
+            return p.get("apiKey", "")
+    env_map = {
+        "finnhub": "FINNHUB_API_KEY",
+        "twelvedata": "TWELVE_DATA_API_KEY",
+        "twelve_data": "TWELVE_DATA_API_KEY",
+    }
+    return os.getenv(env_map.get(provider_id, ""), "")
+
+TWELVE_DATA_KEY = get_provider_key("twelvedata") or get_provider_key("twelve_data") or os.getenv("TWELVE_DATA_API_KEY", "")
+FINNHUB_KEY = get_provider_key("finnhub") or os.getenv("FINNHUB_API_KEY", "")
 
 YFINANCE_SYMBOL_MAP = {
     "XAUUSD": "GC=F",
@@ -282,11 +307,33 @@ def fetch_candles_finnhub(symbol, start_date, end_date):
         return None
 
 
-PROVIDERS = [
-    ("yfinance", fetch_candles_yfinance),
-    ("finnhub", fetch_candles_finnhub),
-    ("twelvedata", fetch_candles_twelvedata),
-]
+BUILTIN_FETCHERS = {
+    "yfinance": fetch_candles_yfinance,
+    "finnhub": fetch_candles_finnhub,
+    "twelvedata": fetch_candles_twelvedata,
+    "twelve_data": fetch_candles_twelvedata,
+}
+
+def build_provider_chain():
+    chain = []
+    for p in PROVIDERS_CONFIG:
+        pid = p.get("id", "")
+        requires_key = p.get("requiresKey", False)
+        api_key = p.get("apiKey", "")
+        if requires_key and not api_key:
+            print(f"  Skipping provider '{p.get('name', pid)}' — no API key configured")
+            continue
+        fetcher = BUILTIN_FETCHERS.get(pid)
+        if fetcher:
+            chain.append((pid, fetcher))
+        else:
+            print(f"  Skipping provider '{p.get('name', pid)}' — no built-in fetcher for '{pid}'")
+    if not chain:
+        chain.append(("yfinance", fetch_candles_yfinance))
+        print("  No valid providers configured, falling back to yfinance")
+    return chain
+
+PROVIDERS = build_provider_chain()
 
 
 def fetch_candles_with_fallback(symbol, start_date, end_date):
