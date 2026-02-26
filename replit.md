@@ -85,6 +85,8 @@ The system includes Python scripts for external integrations:
 ### Price Verification (Dynamic Multi-Provider Fallback)
 Signal verification uses a fully dynamic provider chain stored in the `price_providers` settings key as JSON. Users can add, edit, delete, and reorder up to 5 providers via Settings UI. Built-in fetcher support: `yfinance`, `finnhub`, `twelvedata`. Providers are tried in configured order; if one fails, the next is used automatically. Providers requiring an API key are skipped if no key is set.
 
+Candle interval is configurable via `verification_interval` setting (15m, 30m, or 1h). Smaller intervals give more accurate results but take longer. The interval is applied to all providers (yfinance, Twelve Data, Finnhub).
+
 ### Python Dependencies
 - `python-telegram-bot`: Telegram integration
 - `aiohttp`: Async HTTP client for API communication

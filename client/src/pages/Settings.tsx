@@ -42,6 +42,7 @@ export default function Settings() {
   const [editingLabel, setEditingLabel] = useState("");
   const [editingId, setEditingId] = useState("");
   const [runningVerification, setRunningVerification] = useState(false);
+  const [verificationInterval, setVerificationInterval] = useState("1h");
 
   interface PriceProvider {
     id: string;
@@ -78,6 +79,7 @@ export default function Settings() {
           }
         } catch {}
       }
+      setVerificationInterval(settingsMap["verification_interval"] || "1h");
       const channelList = settingsMap["telegram_channels"];
       if (channelList) {
         const parsed = JSON.parse(channelList);
@@ -925,10 +927,48 @@ export default function Settings() {
 
               <Separator />
 
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Candle Interval</h4>
+                  <p className="text-[11px] text-muted-foreground mb-2">Smaller intervals give more accurate results but take longer to process</p>
+                </div>
+                <div className="flex gap-2">
+                  {[
+                    { value: "15m", label: "15 min", desc: "Most accurate" },
+                    { value: "30m", label: "30 min", desc: "Balanced" },
+                    { value: "1h", label: "1 hour", desc: "Fastest" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      className={`flex-1 rounded-lg border p-3 text-center transition-colors ${
+                        verificationInterval === opt.value
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background/30 text-muted-foreground hover:border-muted-foreground/40"
+                      }`}
+                      onClick={async () => {
+                        setVerificationInterval(opt.value);
+                        try {
+                          await saveMutation.mutateAsync({ key: "verification_interval", value: opt.value });
+                          toast({ title: "Interval Updated", description: `Verification will use ${opt.label} candles.` });
+                        } catch {
+                          toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+                        }
+                      }}
+                      data-testid={`button-interval-${opt.value}`}
+                    >
+                      <div className="text-sm font-semibold">{opt.label}</div>
+                      <div className="text-[10px] mt-0.5">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-medium">Run Verification</h4>
-                  <p className="text-[11px] text-muted-foreground">Check all signals against real market prices using the provider chain above</p>
+                  <p className="text-[11px] text-muted-foreground">Check all signals using {verificationInterval === "15m" ? "15-minute" : verificationInterval === "30m" ? "30-minute" : "1-hour"} candles</p>
                 </div>
                 <Button
                   className="bg-success hover:bg-success/90 text-success-foreground"
@@ -967,9 +1007,10 @@ export default function Settings() {
                 <h4 className="text-sm font-medium mb-2">How it works</h4>
                 <ul className="text-xs text-muted-foreground space-y-1.5">
                   <li>• Providers are tried in the order shown above (top = first)</li>
-                  <li>• If a provider fails or returns no data, the next one is tried</li>
-                  <li>• Use the arrows to reorder providers in your preferred priority</li>
-                  <li>• Providers without a required API key will be skipped</li>
+                  <li>• <strong>15 min</strong> candles: Most accurate — less chance of SL and TP being hit in the same candle</li>
+                  <li>• <strong>30 min</strong> candles: Good balance of accuracy and speed</li>
+                  <li>• <strong>1 hour</strong> candles: Fastest processing, slightly less accurate for tight SL/TP levels</li>
+                  <li>• When both SL and TP are hit in the same candle, the closer one is assumed to have hit first</li>
                   <li>• Each verified signal shows which provider was used</li>
                 </ul>
               </div>

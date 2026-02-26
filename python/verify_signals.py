@@ -39,6 +39,18 @@ def load_providers_config():
 
 PROVIDERS_CONFIG = load_providers_config()
 
+def load_verification_interval():
+    interval = get_setting("verification_interval")
+    if interval in ("15m", "30m", "1h"):
+        return interval
+    return "1h"
+
+CANDLE_INTERVAL = load_verification_interval()
+
+YFINANCE_INTERVAL_MAP = {"15m": "15m", "30m": "30m", "1h": "1h"}
+TWELVEDATA_INTERVAL_MAP = {"15m": "15min", "30m": "30min", "1h": "1h"}
+FINNHUB_RESOLUTION_MAP = {"15m": "15", "30m": "30", "1h": "60"}
+
 def get_provider_key(provider_id):
     for p in PROVIDERS_CONFIG:
         if p.get("id") == provider_id:
@@ -137,9 +149,10 @@ def fetch_candles_yfinance(symbol, start_date, end_date):
         ticker_symbol = get_yfinance_symbol(symbol)
         start_str = start_date.strftime("%Y-%m-%d")
         end_str = (end_date + timedelta(days=1)).strftime("%Y-%m-%d")
+        yf_interval = YFINANCE_INTERVAL_MAP.get(CANDLE_INTERVAL, "1h")
 
         ticker = yf.Ticker(ticker_symbol)
-        df = ticker.history(start=start_str, end=end_str, interval="1h")
+        df = ticker.history(start=start_str, end=end_str, interval=yf_interval)
 
         if df is None or df.empty:
             print(f"    [yfinance] No data for {ticker_symbol}")
@@ -186,9 +199,10 @@ def fetch_candles_twelvedata(symbol, start_date, end_date):
     start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
     end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
 
+    td_interval = TWELVEDATA_INTERVAL_MAP.get(CANDLE_INTERVAL, "1h")
     params = urllib.parse.urlencode({
         "symbol": td_symbol,
-        "interval": "1h",
+        "interval": td_interval,
         "start_date": start_str,
         "end_date": end_str,
         "apikey": TWELVE_DATA_KEY,
@@ -268,9 +282,10 @@ def fetch_candles_finnhub(symbol, start_date, end_date):
     from_ts = int(start_date.timestamp())
     to_ts = int(end_date.timestamp())
 
+    fh_resolution = FINNHUB_RESOLUTION_MAP.get(CANDLE_INTERVAL, "60")
     params = urllib.parse.urlencode({
         "symbol": fh_symbol,
-        "resolution": "60",
+        "resolution": fh_resolution,
         "from": from_ts,
         "to": to_ts,
         "token": FINNHUB_KEY,
@@ -445,8 +460,10 @@ def main():
         print("Install yfinance (pip install yfinance) or set FINNHUB_API_KEY / TWELVE_DATA_API_KEY")
         return
 
+    interval_label = {"15m": "15-minute", "30m": "30-minute", "1h": "1-hour"}.get(CANDLE_INTERVAL, "1-hour")
     print(f"Price providers available: {', '.join(available)}")
-    print(f"Fallback order: yfinance -> Finnhub -> Twelve Data\n")
+    print(f"Candle interval: {interval_label}")
+    print(f"Fallback order: {' -> '.join(p[0] for p in PROVIDERS)}\n")
 
     print("Fetching channel signals from database...")
     signals = get_channel_signals()
@@ -475,7 +492,7 @@ def main():
         grouped[symbol].append(sig)
 
     print(f"Unique symbols: {list(grouped.keys())}")
-    log_to_api("INFO", f"Price Verification: Starting verification of {len(signals_to_verify)} signals across {len(grouped)} symbols (providers: {', '.join(available)})")
+    log_to_api("INFO", f"Price Verification: Starting {len(signals_to_verify)} signals across {len(grouped)} symbols using {interval_label} candles (providers: {', '.join(available)})")
 
     verified_count = 0
     win_count = 0
