@@ -1,194 +1,209 @@
-# AlgoTrade Pro — Local Setup Guide
+# AlgoTrade Pro - Setup Guide
 
-## Prerequisites
+## Overview
 
-- **Node.js** v20+
-- **Python** 3.11+
-- **PostgreSQL** 14+
-- **VS Code** or any code editor
+AlgoTrade Pro is a complete trading automation system that connects Telegram signal channels with the cTrader trading platform. The system consists of three main components:
 
----
+1. **Web Dashboard** (React + Node.js) - Real-time monitoring and control
+2. **Telegram Listener** (Python) - Monitors Telegram channels for trading signals
+3. **cTrader Bridge** (Python) - Executes trades via cTrader Open API
 
-## Step 1: Clone / Download the Project
+## Quick Start
 
-Download all project files from Replit to your local machine.
+### 1. Install Dependencies
 
----
+All Node.js and Python dependencies are already installed.
 
-## Step 2: Set Up PostgreSQL
+### 2. Database Setup
 
-Create a new local database:
-
-```bash
-createdb algotrade
-```
-
-Or use pgAdmin / any Postgres GUI to create a database called `algotrade`.
-
----
-
-## Step 3: Create a `.env` File
-
-Create a `.env` file in the project root:
-
-```
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/algotrade
-```
-
-Replace `postgres` and `yourpassword` with your local Postgres username and password.
-
-> **Note:** The Replit database is internal to Replit's network and cannot be accessed from outside. You must use your own local PostgreSQL instance.
-
----
-
-## Step 4: Install Node.js Dependencies
+The PostgreSQL database is already created and connected. To populate it with test data:
 
 ```bash
-npm install
+tsx scripts/seed_data.ts
 ```
 
----
-
-## Step 5: Install Python Dependencies
-
-```bash
-pip install telethon yfinance finnhub-python aiohttp
-```
-
----
-
-## Step 6: Push the Database Schema
-
-```bash
-npm run db:push
-```
-
-This creates all the required tables:
-- `signals` — Trading signals
-- `trades` — Active and historical trades
-- `system_logs` — Application event logs
-- `settings` — Key-value configuration storage
-- `channel_signals` — Telegram channel signals
-
----
-
-## Step 7: Copy the Telegram Session File
-
-Copy `python/telegram_session.session` from the Replit project to the same path in your local project.
-
-This file contains your authenticated Telegram session so you don't need to re-login.
-
-> **Keep this file private** — it provides access to your Telegram account.
-
----
-
-## Step 8: Run the Application
-
-Open **two terminals**:
-
-### Terminal 1 — Web App
+### 3. Start the Web Application
 
 ```bash
 npm run dev
 ```
 
-Starts the Express server + Vite frontend on **port 5000**.
-Open [http://localhost:5000](http://localhost:5000) in your browser.
+The dashboard will be available at `http://localhost:5000`
 
-### Terminal 2 — Telegram Listener
+## Python Services Setup
+
+### Required Environment Variables
+
+Before running the Python services, you need to configure the following secrets:
+
+#### Telegram Bot Setup
+
+1. **Create a Telegram Bot**:
+   - Message @BotFather on Telegram
+   - Send `/newbot` and follow the instructions
+   - Copy the bot token
+
+2. **Add Bot to Your Signal Channel**:
+   - Add your bot as an administrator to the Telegram channel where signals are posted
+   - The bot needs permission to read messages
+
+3. **Set Environment Variable**:
+   ```bash
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   ```
+
+#### cTrader API Setup
+
+1. **Register for cTrader Open API**:
+   - Visit https://openapi.ctrader.com/
+   - Create an account and register an application
+   - Note your Client ID and Client Secret
+
+2. **Get Account ID**:
+   - Log into your cTrader account
+   - Find your account ID in the account settings
+
+3. **Set Environment Variables**:
+   ```bash
+   CTRADER_CLIENT_ID=your_client_id
+   CTRADER_CLIENT_SECRET=your_client_secret
+   CTRADER_ACCOUNT_ID=your_account_id
+   ```
+
+### Running the Python Services
+
+#### Option 1: Run Both Services Together
 
 ```bash
+# Terminal 1: Start Telegram Listener
 python python/telegram_listener.py
+
+# Terminal 2: Start cTrader Bridge
+python python/ctrader_client.py
 ```
 
-Listens for live trading signals from your monitored Telegram channels.
+#### Option 2: Test Without Real Trading
 
----
+If you want to test the system without connecting to real trading:
 
-## Step 9: Configure Settings
+1. Only run the Telegram listener:
+   ```bash
+   python python/telegram_listener.py
+   ```
 
-Once the app is running, go to the **Settings** page (`http://localhost:5000/settings`) and configure:
+2. Signals will be parsed and stored in the database, but no trades will be executed
 
-- **Telegram**: API ID, API Hash, Phone number, Channel list
-- **Price Verification Providers**: Add up to 5 providers (Yahoo Finance, Finnhub, Twelve Data, etc.) with API keys
-- **Candle Interval**: Choose 15m, 30m, or 1h for verification accuracy
-- **cTrader**: Client ID, Client Secret, Account ID (for trade execution)
-- **Risk Management**: Max risk %, daily loss limit, auto break-even
+## How It Works
 
----
+### Signal Flow
 
-## Step 10: Import Historical Data (Optional)
+1. **Telegram Channel** posts a signal like:
+   ```
+   🚀AUDCAD - BUY🚀
+   Entry: 0.91169
+   Stopp-Loss: 0.90869
+   Take-Profit 1: 0.91369
+   Take-Profit 2: 0.91569
+   Take-Profit 3: 0.91769
+   ```
 
-To fetch historical signals from your Telegram channels:
+2. **Telegram Listener** (Python):
+   - Monitors the channel for new messages
+   - Parses the signal using regex pattern matching
+   - Sends parsed signal to the Node.js API
 
-```bash
-python python/fetch_history.py
+3. **Database** (PostgreSQL):
+   - Stores the signal with status "PENDING"
+   - Logs all system events
+
+4. **cTrader Bridge** (Python):
+   - Polls the database every 5 seconds for PENDING signals
+   - Calculates lot size based on 2% risk management
+   - Places market order via cTrader Open API
+   - Updates signal status to "ACTIVE"
+   - Creates trade record in database
+
+5. **Web Dashboard** (React):
+   - Displays signals, trades, and logs in real-time
+   - Updates automatically via WebSocket connection
+
+## Features
+
+### Risk Management
+- Default 2% risk per trade
+- Configurable in Settings page
+- Automatic lot size calculation based on account balance
+- Stop loss distance calculation
+
+### Real-Time Updates
+- WebSocket connection for instant updates
+- Live P&L tracking
+- Real-time system logs
+
+### Multi-Take-Profit Support
+- Supports up to 3 take-profit levels
+- First TP automatically set when placing order
+- Manual adjustment available in cTrader
+
+## Testing the System
+
+### 1. Test Signal Parsing
+
+Send a test message to your Telegram channel in this format:
+```
+🚀EURUSD - SELL🚀
+Entry: 1.0850
+Stopp-Loss: 1.0890
+Take-Profit 1: 1.0810
+Take-Profit 2: 1.0780
 ```
 
-This re-fetches and parses all past messages from your configured channels.
+### 2. Monitor Logs
 
----
+Check the System Logs page in the dashboard to see:
+- Signal detection confirmation
+- Parsing success
+- Risk calculation
+- Order placement (if cTrader is connected)
 
-## Key Files
+### 3. View Dashboard
 
-| File | Purpose |
-|------|---------|
-| `server/index.ts` | Express server entry point (port 5000) |
-| `shared/schema.ts` | Database schema (Drizzle ORM) |
-| `client/src/pages/` | React frontend pages |
-| `python/telegram_listener.py` | Live Telegram signal monitor |
-| `python/verify_signals.py` | Price verification against real market data |
-| `python/fetch_history.py` | Fetch historical messages from Telegram channels |
-| `python/ctrader_client.py` | cTrader Open API trade execution |
-| `drizzle.config.ts` | Drizzle ORM / migration config |
-
----
-
-## Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server (port 5000) |
-| `npm run build` | Build for production |
-| `npm start` | Run production build |
-| `npm run db:push` | Push schema changes to database |
-| `python python/telegram_listener.py` | Start Telegram signal listener |
-| `python python/fetch_history.py` | Fetch channel history |
-| `python python/verify_signals.py` | Run price verification on all signals |
-
----
-
-## Settings Stored in Database
-
-These are configured via the Settings page and saved in the `settings` table (not environment variables):
-
-| Setting Key | Description |
-|-------------|-------------|
-| `telegram_api_id` | Telegram API ID from my.telegram.org |
-| `telegram_api_hash` | Telegram API Hash |
-| `telegram_phone` | Phone number for Telegram auth |
-| `telegram_channels` | JSON array of monitored channel IDs/usernames |
-| `price_providers` | JSON array of verification providers (up to 5) |
-| `verification_interval` | Candle interval: `15m`, `30m`, or `1h` |
-| `finnhub_api_key` | Finnhub API key (optional) |
-| `twelve_data_api_key` | Twelve Data API key (optional) |
-| `ctrader_account_id` | cTrader trading account ID |
-| `max_risk_percent` | Max risk per trade (default: 2.0%) |
-| `daily_loss_limit` | Daily loss limit in USD |
-| `auto_break_even` | Auto move SL to break-even at TP1 |
-
----
+- **Dashboard**: Overview of performance and active positions
+- **Signals**: History of all received signals
+- **Active Trades**: Real-time position monitor
+- **System Logs**: Complete system activity log
+- **Settings**: Configure API credentials and risk parameters
 
 ## Troubleshooting
 
-**Database connection error:**
-Make sure PostgreSQL is running and your `DATABASE_URL` in `.env` is correct.
+### Telegram Listener Not Receiving Messages
 
-**Telegram session expired:**
-Delete `python/telegram_session.session` and re-run the listener — it will prompt you to log in again with your phone number.
+- Verify the bot token is correct
+- Ensure the bot is added to the channel as an administrator
+- Check that the bot has permission to read messages
 
-**yfinance not returning data:**
-Yahoo Finance has a 60-day lookback limit for 15-minute candles and 730 days for hourly candles. Older signals may show as "PENDING" if data is unavailable.
+### cTrader API Connection Failed
 
-**Port 5000 already in use:**
-Kill any existing process on port 5000 or change the port in `server/index.ts`.
+- Verify Client ID and Client Secret
+- Check that your cTrader account is active
+- Ensure you have sufficient balance for trading
+
+### No Trades Being Placed
+
+- Check that both Python services are running
+- Verify signals are being created in the database (check Signals page)
+- Review system logs for error messages
+
+## Security Notes
+
+- Never commit API keys or bot tokens to version control
+- Use Replit Secrets to store sensitive credentials
+- Test with a demo cTrader account before using real money
+- Start with small lot sizes and low risk percentages
+
+## Support
+
+For issues or questions:
+- Check the System Logs page for error messages
+- Review the database for signal and trade records
+- Ensure all environment variables are properly set
