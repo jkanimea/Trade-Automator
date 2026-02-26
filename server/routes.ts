@@ -11,14 +11,14 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
   // WebSocket for real-time updates
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  
+
   wss.on("connection", (ws) => {
     console.log("WebSocket client connected");
     wsClients.add(ws);
-    
+
     ws.on("close", () => {
       wsClients.delete(ws);
     });
@@ -86,7 +86,7 @@ export async function registerRoutes(
   // Trades routes
   app.get("/api/trades", async (req, res) => {
     try {
-      const trades = req.query.status === 'active' 
+      const trades = req.query.status === 'active'
         ? await storage.getActiveTrades()
         : await storage.getTrades();
       res.json(trades);
@@ -194,7 +194,7 @@ export async function registerRoutes(
   app.get("/api/channel-signals", async (req, res) => {
     try {
       const channelId = req.query.channelId as string | undefined;
-      const data = channelId 
+      const data = channelId
         ? await storage.getChannelSignalsByChannel(channelId)
         : await storage.getChannelSignals();
       res.json(data);
@@ -269,7 +269,7 @@ export async function registerRoutes(
   app.post("/api/verify-signals", async (req, res) => {
     try {
       const { exec } = await import("child_process");
-      exec("python python/verify_signals.py", { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
+      exec("py python/verify_signals.py", { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
         if (error) {
           console.error("Verification error:", stderr);
         }
