@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play, ShieldCheck, ExternalLink, Zap } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -572,100 +572,209 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                Price Verification
+                Price Verification Providers
               </CardTitle>
-              <CardDescription>Verify signal outcomes against real market data with multi-provider fallback</CardDescription>
+              <CardDescription>Configure data providers for verifying signal outcomes against real market prices. If one fails, the next is tried automatically.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
 
-              <div className="rounded-lg border border-success/20 bg-success/5 p-4">
-                <h4 className="text-sm font-medium text-success mb-2">Provider Fallback Chain</h4>
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <span className="bg-success/20 text-success px-2 py-0.5 rounded">1. Yahoo Finance</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className={`px-2 py-0.5 rounded ${finnhubApiKey ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>2. Finnhub</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className={`px-2 py-0.5 rounded ${twelveDataApiKey ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>3. Twelve Data</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  Yahoo Finance is free with no API key needed. Finnhub and Twelve Data are optional fallbacks if Yahoo fails.
-                </p>
-              </div>
-
-              <div className="space-y-4 border-t border-border pt-4">
-                <h4 className="text-sm font-medium text-muted-foreground">Optional Fallback API Keys</h4>
-
-                <div className="space-y-2">
-                  <Label htmlFor="finnhub-key">Finnhub API Key (optional)</Label>
-                  <div className="relative">
-                    <Input
-                      id="finnhub-key"
-                      type={showFinnhubKey ? "text" : "password"}
-                      value={finnhubApiKey}
-                      onChange={(e) => setFinnhubApiKey(e.target.value)}
-                      placeholder="Free at finnhub.io — 60 calls/min"
-                      className="bg-background/50 font-mono pr-10"
-                      data-testid="input-finnhub-key"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowFinnhubKey(!showFinnhubKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      data-testid="button-toggle-finnhub-visibility"
-                    >
-                      {showFinnhubKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+              <div className="grid gap-3">
+                <div className="rounded-lg border-2 border-success/40 bg-success/5 p-4" data-testid="provider-card-yahoo">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-success/20 flex items-center justify-center">
+                        <Zap className="h-4.5 w-4.5 text-success" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold">Yahoo Finance</h4>
+                          <span className="text-[10px] font-mono bg-success/20 text-success px-1.5 py-0.5 rounded">PRIMARY</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Free, unlimited, no API key required</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                      <span className="text-xs font-mono text-success">Active</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-[11px] text-muted-foreground font-mono">
+                    <span>Forex pairs</span>
+                    <span className="text-border">|</span>
+                    <span>Gold/Silver futures</span>
+                    <span className="text-border">|</span>
+                    <span>Indices (futures)</span>
+                    <span className="text-border">|</span>
+                    <span>Crypto</span>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="twelve-data-key">Twelve Data API Key (optional)</Label>
-                  <div className="relative">
-                    <Input
-                      id="twelve-data-key"
-                      type={showTwelveDataKey ? "text" : "password"}
-                      value={twelveDataApiKey}
-                      onChange={(e) => setTwelveDataApiKey(e.target.value)}
-                      placeholder="Free at twelvedata.com — 800/day"
-                      className="bg-background/50 font-mono pr-10"
-                      data-testid="input-twelve-data-key"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowTwelveDataKey(!showTwelveDataKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      data-testid="button-toggle-twelve-data-visibility"
-                    >
-                      {showTwelveDataKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                <div className={`rounded-lg border p-4 transition-colors ${finnhubApiKey ? 'border-primary/40 bg-primary/5' : 'border-border bg-background/30'}`} data-testid="provider-card-finnhub">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${finnhubApiKey ? 'bg-primary/20' : 'bg-muted'}`}>
+                        <ShieldCheck className={`h-4.5 w-4.5 ${finnhubApiKey ? 'text-primary' : 'text-muted-foreground'}`} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold">Finnhub</h4>
+                          <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded">FALLBACK #1</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Free tier: 60 calls/min</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {finnhubApiKey ? (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                          <span className="text-xs font-mono text-primary">Ready</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                          <span className="text-xs font-mono text-muted-foreground">No key</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Input
+                        id="finnhub-key"
+                        type={showFinnhubKey ? "text" : "password"}
+                        value={finnhubApiKey}
+                        onChange={(e) => setFinnhubApiKey(e.target.value)}
+                        placeholder="Paste your Finnhub API key"
+                        className="bg-background/50 font-mono text-xs h-8 pr-20"
+                        data-testid="input-finnhub-key"
+                      />
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowFinnhubKey(!showFinnhubKey)}
+                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                          data-testid="button-toggle-finnhub-visibility"
+                        >
+                          {showFinnhubKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <a href="https://finnhub.io/register" target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline flex items-center gap-1" data-testid="link-finnhub-signup">
+                        Get free API key <ExternalLink className="h-3 w-3" />
+                      </a>
+                      {finnhubApiKey.trim() && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[11px] px-2"
+                          onClick={async () => {
+                            try {
+                              await saveMutation.mutateAsync({ key: "finnhub_api_key", value: finnhubApiKey.trim() });
+                              toast({ title: "Saved", description: "Finnhub API key saved." });
+                            } catch {
+                              toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+                            }
+                          }}
+                          disabled={saveMutation.isPending}
+                          data-testid="button-save-finnhub-key"
+                        >
+                          {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+                          Save
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`rounded-lg border p-4 transition-colors ${twelveDataApiKey ? 'border-primary/40 bg-primary/5' : 'border-border bg-background/30'}`} data-testid="provider-card-twelvedata">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${twelveDataApiKey ? 'bg-primary/20' : 'bg-muted'}`}>
+                        <BarChart3 className={`h-4.5 w-4.5 ${twelveDataApiKey ? 'text-primary' : 'text-muted-foreground'}`} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold">Twelve Data</h4>
+                          <span className="text-[10px] font-mono bg-muted text-muted-foreground px-1.5 py-0.5 rounded">FALLBACK #2</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Free tier: 800/day, 8/min</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {twelveDataApiKey ? (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                          <span className="text-xs font-mono text-primary">Ready</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                          <span className="text-xs font-mono text-muted-foreground">No key</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Input
+                        id="twelve-data-key"
+                        type={showTwelveDataKey ? "text" : "password"}
+                        value={twelveDataApiKey}
+                        onChange={(e) => setTwelveDataApiKey(e.target.value)}
+                        placeholder="Paste your Twelve Data API key"
+                        className="bg-background/50 font-mono text-xs h-8 pr-20"
+                        data-testid="input-twelve-data-key"
+                      />
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowTwelveDataKey(!showTwelveDataKey)}
+                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                          data-testid="button-toggle-twelve-data-visibility"
+                        >
+                          {showTwelveDataKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <a href="https://twelvedata.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline flex items-center gap-1" data-testid="link-twelvedata-signup">
+                        Get free API key <ExternalLink className="h-3 w-3" />
+                      </a>
+                      {twelveDataApiKey.trim() && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[11px] px-2"
+                          onClick={async () => {
+                            try {
+                              await saveMutation.mutateAsync({ key: "twelve_data_api_key", value: twelveDataApiKey.trim() });
+                              toast({ title: "Saved", description: "Twelve Data API key saved." });
+                            } catch {
+                              toast({ title: "Error", description: "Failed to save.", variant: "destructive" });
+                            }
+                          }}
+                          disabled={saveMutation.isPending}
+                          data-testid="button-save-twelve-data-key"
+                        >
+                          {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+                          Save
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-2 flex items-center gap-2">
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium">Run Verification</h4>
+                  <p className="text-[11px] text-muted-foreground">Check all signals against real market prices using the provider chain above</p>
+                </div>
                 <Button
-                  onClick={async () => {
-                    try {
-                      if (finnhubApiKey.trim()) {
-                        await saveMutation.mutateAsync({ key: "finnhub_api_key", value: finnhubApiKey.trim() });
-                      }
-                      if (twelveDataApiKey.trim()) {
-                        await saveMutation.mutateAsync({ key: "twelve_data_api_key", value: twelveDataApiKey.trim() });
-                      }
-                      toast({ title: "API Keys Saved", description: "Fallback API keys have been saved." });
-                    } catch (error) {
-                      toast({ title: "Error", description: "Failed to save API keys.", variant: "destructive" });
-                    }
-                  }}
-                  disabled={saveMutation.isPending || (!finnhubApiKey.trim() && !twelveDataApiKey.trim())}
-                  data-testid="button-save-verification-keys"
-                >
-                  {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Save API Keys
-                </Button>
-                <Button
-                  variant="outline"
-                  className="text-success border-success/30 hover:bg-success/10 hover:text-success"
+                  className="bg-success hover:bg-success/90 text-success-foreground"
                   onClick={async () => {
                     setRunningVerification(true);
                     try {
@@ -676,10 +785,10 @@ export default function Settings() {
                       } else {
                         toast({
                           title: "Verification Started",
-                          description: data.message || "Signal verification is running in the background. Check logs for progress.",
+                          description: data.message || "Running in the background. Check Logs page for progress.",
                         });
                       }
-                    } catch (error) {
+                    } catch {
                       toast({ title: "Error", description: "Failed to start verification.", variant: "destructive" });
                     } finally {
                       setRunningVerification(false);
@@ -700,12 +809,12 @@ export default function Settings() {
               <div className="rounded-lg border border-border bg-background/30 p-4">
                 <h4 className="text-sm font-medium mb-2">How it works</h4>
                 <ul className="text-xs text-muted-foreground space-y-1.5">
-                  <li>• Uses Yahoo Finance first (free, unlimited, no key needed)</li>
-                  <li>• Falls back to Finnhub then Twelve Data if Yahoo fails for a symbol</li>
+                  <li>• Tries Yahoo Finance first (free, unlimited, no key needed)</li>
+                  <li>• If Yahoo fails, automatically tries Finnhub, then Twelve Data</li>
                   <li>• Fetches real hourly price candles for each signal's symbol and date</li>
-                  <li>• Checks if the price hit Take Profit or Stop Loss after signal was posted</li>
+                  <li>• Checks if price hit Take Profit or Stop Loss after signal was posted</li>
                   <li>• Updates each signal's outcome (WIN/LOSS) based on actual market data</li>
-                  <li>• Results appear on the Dashboard, Signals, and Active Trades pages</li>
+                  <li>• Each verified signal shows which provider was used</li>
                 </ul>
               </div>
             </CardContent>
