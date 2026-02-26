@@ -36,7 +36,7 @@ export interface IStorage {
   getChannelSignals(): Promise<ChannelSignal[]>;
   getChannelSignalsByChannel(channelId: string): Promise<ChannelSignal[]>;
   createChannelSignal(signal: InsertChannelSignal): Promise<ChannelSignal>;
-  updateChannelSignalOutcome(id: number, outcome: string, verificationNote: string): Promise<ChannelSignal | undefined>;
+  updateChannelSignalOutcome(id: number, outcome: string, verificationNote: string, takeProfits?: number[]): Promise<ChannelSignal | undefined>;
   clearChannelSignals(channelId: string): Promise<void>;
 }
 
@@ -141,9 +141,13 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async updateChannelSignalOutcome(id: number, outcome: string, verificationNote: string): Promise<ChannelSignal | undefined> {
+  async updateChannelSignalOutcome(id: number, outcome: string, verificationNote: string, takeProfits?: number[]): Promise<ChannelSignal | undefined> {
+    const updates: any = { outcome, verificationNote };
+    if (takeProfits && Array.isArray(takeProfits)) {
+      updates.takeProfits = takeProfits;
+    }
     const result = await db.update(channelSignals)
-      .set({ outcome, verificationNote })
+      .set(updates)
       .where(eq(channelSignals.id, id))
       .returning();
     return result[0];

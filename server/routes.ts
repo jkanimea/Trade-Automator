@@ -243,11 +243,11 @@ export async function registerRoutes(
   app.put("/api/channel-signals/:id/verify", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { outcome, verificationNote } = req.body;
+      const { outcome, verificationNote, takeProfits } = req.body;
       if (!outcome) {
         return res.status(400).json({ error: "outcome is required" });
       }
-      const updated = await storage.updateChannelSignalOutcome(id, outcome, verificationNote || "");
+      const updated = await storage.updateChannelSignalOutcome(id, outcome, verificationNote || "", takeProfits);
       if (!updated) {
         return res.status(404).json({ error: "Signal not found" });
       }

@@ -49,8 +49,13 @@ async def send_signal_to_api(signal: dict):
 
 def extract_tps_from_lines(text):
     tps = []
-    for m in re.finditer(r'TP\s*\d*\.?\s*@?\s*([\d.]+)', text, re.IGNORECASE):
-        tps.append(float(m.group(1)))
+    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([\d.]+)', text, re.IGNORECASE):
+        val = float(m.group(1))
+        start = m.start()
+        before = text[max(0, start - 15):start].lower().strip()
+        if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
+            continue
+        tps.append(val)
     return tps
 
 def extract_sl_from_lines(text):
