@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Radio, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getTrades, getChannelSignals, getSignals } from "@/lib/api";
+import { getTrades, getChannelSignals } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToast } from "@/hooks/use-toast";
 import { useMemo, useState } from "react";
@@ -25,15 +25,6 @@ export default function Trades() {
     queryKey: ["/api/channel-signals"],
     queryFn: () => getChannelSignals(),
   });
-
-  const { data: liveSignals = [], isLoading: loadingLiveSignals } = useQuery({
-    queryKey: ["/api/signals"],
-    queryFn: () => getSignals(),
-  });
-
-  const pendingLiveSignals = useMemo(() => {
-    return liveSignals.filter((s: any) => s.status === "PENDING");
-  }, [liveSignals]);
 
   const pendingChannelSignals = useMemo(() => {
     const pending = channelSignals.filter((s: any) => s.outcome === "PENDING");
@@ -144,68 +135,6 @@ export default function Trades() {
                       ))}
                     </tbody>
                   </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/50 backdrop-blur-sm border-border">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                <CardTitle>Live Signals</CardTitle>
-                {pendingLiveSignals.length > 0 && (
-                  <Badge variant="outline" className="ml-2">{pendingLiveSignals.length} active</Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Signals just received — awaiting execution or outcome</p>
-            </CardHeader>
-            <CardContent>
-              {loadingLiveSignals ? (
-                <div className="text-center text-muted-foreground py-6">Loading...</div>
-              ) : pendingLiveSignals.length === 0 ? (
-                <div className="text-center text-muted-foreground py-6">No live signals right now</div>
-              ) : (
-                <div className="space-y-2">
-                  {pendingLiveSignals.map((sig: any) => (
-                    <div key={sig.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border border-border bg-background/30" data-testid={`row-live-signal-${sig.id}`}>
-                      <div className="flex items-center gap-3">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 ${
-                          sig.direction === 'BUY' ? 'bg-success/10 border-success/30 text-success' : 'bg-destructive/10 border-destructive/30 text-destructive'
-                        }`}>
-                          {sig.direction === 'BUY' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-sm">{sig.symbol}</span>
-                            <Badge variant="outline" className="text-[10px] font-mono h-5">{sig.direction}</Badge>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground mt-0.5">
-                            <span>Entry: <span className="text-foreground">{sig.entry}</span></span>
-                            <ArrowRight className="h-2.5 w-2.5" />
-                            <span>SL: <span className="text-destructive">{sig.stopLoss}</span></span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1.5 flex-wrap">
-                          {sig.takeProfits?.map((tp: number, idx: number) => (
-                            <div key={idx} className="bg-background/50 border border-border px-2 py-0.5 rounded text-[11px] font-mono">
-                              <span className="text-muted-foreground mr-1">TP{idx + 1}</span>
-                              <span className="text-success">{tp}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                          <span className="text-xs text-amber-500 font-medium font-mono">LIVE</span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          {new Date(sig.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </CardContent>

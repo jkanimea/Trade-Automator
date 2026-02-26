@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowRight, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, ChevronRight, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getSignals, getChannelSignals } from "@/lib/api";
+import { getChannelSignals } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,7 +14,6 @@ type OutcomeFilter = "ALL" | "WIN" | "LOSS" | "PENDING";
 
 interface NormalizedSignal {
   id: string;
-  source: "live" | "channel";
   channelId: string;
   channelName: string;
   symbol: string;
@@ -23,7 +22,6 @@ interface NormalizedSignal {
   stopLoss: number;
   takeProfits: number[];
   outcome: string;
-  pnl: number | null;
   date: Date;
   verificationNote: string | null;
 }
@@ -36,40 +34,16 @@ export default function Signals() {
   const [collapsedChannels, setCollapsedChannels] = useState<Record<string, boolean>>({});
   const [verifying, setVerifying] = useState(false);
 
-  const { data: liveSignals = [], isLoading: loadingLive } = useQuery({
-    queryKey: ["signals"],
-    queryFn: getSignals,
-  });
-
-  const { data: channelSignals = [], isLoading: loadingChannel } = useQuery({
+  const { data: channelSignals = [], isLoading } = useQuery({
     queryKey: ["/api/channel-signals"],
     queryFn: () => getChannelSignals(),
   });
 
   const allSignals: NormalizedSignal[] = useMemo(() => {
-    const live = liveSignals
-      .filter((s: any) => s.status !== "PENDING")
-      .map((s: any) => ({
-        id: `live-${s.id}`,
-        source: "live" as const,
-        channelId: "_live",
-        channelName: "Live Listener",
-        symbol: s.symbol,
-        direction: s.direction,
-        entry: s.entry,
-        stopLoss: s.stopLoss,
-        takeProfits: s.takeProfits || [],
-        outcome: s.pnl && s.pnl > 0 ? "WIN" : s.pnl && s.pnl < 0 ? "LOSS" : "PENDING",
-        pnl: s.pnl,
-        date: new Date(s.timestamp),
-        verificationNote: null,
-      }));
-
-    const channel = channelSignals
+    let list = channelSignals
       .filter((s: any) => s.outcome !== "PENDING")
       .map((s: any) => ({
         id: `ch-${s.id}`,
-        source: "channel" as const,
         channelId: s.channelId,
         channelName: s.channelName,
         symbol: s.symbol,
@@ -78,17 +52,15 @@ export default function Signals() {
         stopLoss: s.stopLoss,
         takeProfits: s.takeProfits || [],
         outcome: s.outcome,
-        pnl: null,
         date: new Date(s.messageDate),
         verificationNote: s.verificationNote || null,
       }));
 
-    let list = [...live, ...channel];
     if (outcomeFilter !== "ALL") {
       list = list.filter(s => s.outcome === outcomeFilter);
     }
     return list;
-  }, [liveSignals, channelSignals, outcomeFilter]);
+  }, [channelSignals, outcomeFilter]);
 
   const channelGroups = useMemo(() => {
     const groups: Record<string, { channelId: string; channelName: string; signals: NormalizedSignal[]; wins: number; losses: number }> = {};
@@ -116,8 +88,6 @@ export default function Signals() {
       losses: allSignals.filter(s => s.outcome === "LOSS").length,
     };
   }, [allSignals]);
-
-  const isLoading = loadingLive || loadingChannel;
 
   const toggleChannel = (channelId: string) => {
     setCollapsedChannels(prev => ({ ...prev, [channelId]: !prev[channelId] }));
@@ -219,7 +189,7 @@ export default function Signals() {
                           <div>
                             <CardTitle className="text-base">{group.channelName}</CardTitle>
                             <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                              {group.channelId !== "_live" ? group.channelId : "Completed live signals"}
+                              {group.channelId}
                             </p>
                           </div>
                         </div>

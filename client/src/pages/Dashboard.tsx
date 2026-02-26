@@ -6,7 +6,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart, 
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight, Clock, ShieldCheck, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getSignals, getTrades, getSystemLogs, getChannelSignals } from "@/lib/api";
+import { getTrades, getSystemLogs, getChannelSignals } from "@/lib/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { performanceData } from "@/lib/mockData";
 
@@ -18,11 +18,6 @@ const COLORS = {
 
 export default function Dashboard() {
   useWebSocket();
-
-  const { data: signals = [] } = useQuery({
-    queryKey: ["signals"],
-    queryFn: getSignals,
-  });
 
   const { data: trades = [] } = useQuery({
     queryKey: ["activeTrades"],
@@ -39,15 +34,16 @@ export default function Dashboard() {
     queryFn: () => getChannelSignals(),
   });
 
-  const activeSignals = signals.filter(s => s.status === 'ACTIVE' || s.status === 'PENDING').slice(0, 3);
   const activeTrades = trades.slice(0, 5);
   const recentLogs = logs.slice(0, 5);
 
   const totalProfit = trades.reduce((sum, t) => sum + (t.profit || 0), 0);
-  const completedSignals = signals.filter(s => s.status === 'COMPLETED');
-  const winRate = completedSignals.length > 0
-    ? (completedSignals.filter(s => (s.pnl || 0) > 0).length / completedSignals.length * 100).toFixed(1)
-    : "0.0";
+
+  const recentChannelSignals = useMemo(() => {
+    return [...channelSignals]
+      .sort((a: any, b: any) => new Date(b.messageDate).getTime() - new Date(a.messageDate).getTime())
+      .slice(0, 5);
+  }, [channelSignals]);
 
   const channelStats = useMemo(() => {
     const grouped: Record<string, { name: string; signals: any[] }> = {};
@@ -288,11 +284,11 @@ export default function Dashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto space-y-4">
-                {activeSignals.length === 0 ? (
-                  <div className="text-center text-muted-foreground text-sm py-8">No active signals</div>
+                {recentChannelSignals.length === 0 ? (
+                  <div className="text-center text-muted-foreground text-sm py-8">No signals yet</div>
                 ) : (
-                  activeSignals.map((signal) => (
-                    <div key={signal.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background/50 hover:bg-accent/50 transition-colors">
+                  recentChannelSignals.map((signal: any) => (
+                    <div key={signal.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background/50 hover:bg-accent/50 transition-colors" data-testid={`dashboard-signal-${signal.id}`}>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold">{signal.symbol}</span>
@@ -303,8 +299,8 @@ export default function Dashboard() {
                         <div className="text-xs text-muted-foreground font-mono">EP: {signal.entry}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs text-muted-foreground">{new Date(signal.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                        <span className={`text-[10px] ${signal.status === 'ACTIVE' ? 'text-success' : 'text-muted-foreground'}`}>{signal.status}</span>
+                        <div className="text-xs text-muted-foreground">{new Date(signal.messageDate).toLocaleDateString()}</div>
+                        <span className={`text-[10px] ${signal.outcome === 'WIN' ? 'text-success' : signal.outcome === 'LOSS' ? 'text-destructive' : 'text-muted-foreground'}`}>{signal.outcome}</span>
                       </div>
                     </div>
                   ))
