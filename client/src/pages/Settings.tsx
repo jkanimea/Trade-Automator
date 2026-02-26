@@ -43,6 +43,8 @@ export default function Settings() {
   const [editingId, setEditingId] = useState("");
   const [twelveDataApiKey, setTwelveDataApiKey] = useState("");
   const [showTwelveDataKey, setShowTwelveDataKey] = useState(false);
+  const [finnhubApiKey, setFinnhubApiKey] = useState("");
+  const [showFinnhubKey, setShowFinnhubKey] = useState(false);
   const [runningVerification, setRunningVerification] = useState(false);
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export default function Settings() {
       setTelegramApiHash(settingsMap["telegram_api_hash"] || "");
       setTelegramPhone(settingsMap["telegram_phone"] || "");
       setTwelveDataApiKey(settingsMap["twelve_data_api_key"] || "");
+      setFinnhubApiKey(settingsMap["finnhub_api_key"] || "");
       const channelList = settingsMap["telegram_channels"];
       if (channelList) {
         const parsed = JSON.parse(channelList);
@@ -571,58 +574,94 @@ export default function Settings() {
                 <BarChart3 className="h-5 w-5" />
                 Price Verification
               </CardTitle>
-              <CardDescription>Verify signal outcomes against real market price data using Twelve Data API</CardDescription>
+              <CardDescription>Verify signal outcomes against real market data with multi-provider fallback</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="twelve-data-key">Twelve Data API Key</Label>
-                <div className="relative">
-                  <Input
-                    id="twelve-data-key"
-                    type={showTwelveDataKey ? "text" : "password"}
-                    value={twelveDataApiKey}
-                    onChange={(e) => setTwelveDataApiKey(e.target.value)}
-                    placeholder="Enter your Twelve Data API key"
-                    className="bg-background/50 font-mono pr-10"
-                    data-testid="input-twelve-data-key"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowTwelveDataKey(!showTwelveDataKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    data-testid="button-toggle-twelve-data-visibility"
-                  >
-                    {showTwelveDataKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+
+              <div className="rounded-lg border border-success/20 bg-success/5 p-4">
+                <h4 className="text-sm font-medium text-success mb-2">Provider Fallback Chain</h4>
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="bg-success/20 text-success px-2 py-0.5 rounded">1. Yahoo Finance</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`px-2 py-0.5 rounded ${finnhubApiKey ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>2. Finnhub</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className={`px-2 py-0.5 rounded ${twelveDataApiKey ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>3. Twelve Data</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Get a free API key at{" "}
-                  <a href="https://twelvedata.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                    twelvedata.com
-                  </a>
-                  {" "}— 800 free checks per day, 8 per minute
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Yahoo Finance is free with no API key needed. Finnhub and Twelve Data are optional fallbacks if Yahoo fails.
                 </p>
+              </div>
+
+              <div className="space-y-4 border-t border-border pt-4">
+                <h4 className="text-sm font-medium text-muted-foreground">Optional Fallback API Keys</h4>
+
+                <div className="space-y-2">
+                  <Label htmlFor="finnhub-key">Finnhub API Key (optional)</Label>
+                  <div className="relative">
+                    <Input
+                      id="finnhub-key"
+                      type={showFinnhubKey ? "text" : "password"}
+                      value={finnhubApiKey}
+                      onChange={(e) => setFinnhubApiKey(e.target.value)}
+                      placeholder="Free at finnhub.io — 60 calls/min"
+                      className="bg-background/50 font-mono pr-10"
+                      data-testid="input-finnhub-key"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowFinnhubKey(!showFinnhubKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid="button-toggle-finnhub-visibility"
+                    >
+                      {showFinnhubKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="twelve-data-key">Twelve Data API Key (optional)</Label>
+                  <div className="relative">
+                    <Input
+                      id="twelve-data-key"
+                      type={showTwelveDataKey ? "text" : "password"}
+                      value={twelveDataApiKey}
+                      onChange={(e) => setTwelveDataApiKey(e.target.value)}
+                      placeholder="Free at twelvedata.com — 800/day"
+                      className="bg-background/50 font-mono pr-10"
+                      data-testid="input-twelve-data-key"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowTwelveDataKey(!showTwelveDataKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid="button-toggle-twelve-data-visibility"
+                    >
+                      {showTwelveDataKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center gap-2">
                 <Button
                   onClick={async () => {
-                    if (!twelveDataApiKey.trim()) {
-                      toast({ title: "Error", description: "Please enter an API key first.", variant: "destructive" });
-                      return;
-                    }
                     try {
-                      await saveMutation.mutateAsync({ key: "twelve_data_api_key", value: twelveDataApiKey.trim() });
-                      toast({ title: "API Key Saved", description: "Twelve Data API key has been saved." });
+                      if (finnhubApiKey.trim()) {
+                        await saveMutation.mutateAsync({ key: "finnhub_api_key", value: finnhubApiKey.trim() });
+                      }
+                      if (twelveDataApiKey.trim()) {
+                        await saveMutation.mutateAsync({ key: "twelve_data_api_key", value: twelveDataApiKey.trim() });
+                      }
+                      toast({ title: "API Keys Saved", description: "Fallback API keys have been saved." });
                     } catch (error) {
-                      toast({ title: "Error", description: "Failed to save API key.", variant: "destructive" });
+                      toast({ title: "Error", description: "Failed to save API keys.", variant: "destructive" });
                     }
                   }}
-                  disabled={saveMutation.isPending}
-                  data-testid="button-save-twelve-data-key"
+                  disabled={saveMutation.isPending || (!finnhubApiKey.trim() && !twelveDataApiKey.trim())}
+                  data-testid="button-save-verification-keys"
                 >
                   {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Save API Key
+                  Save API Keys
                 </Button>
                 <Button
                   variant="outline"
@@ -646,7 +685,7 @@ export default function Settings() {
                       setRunningVerification(false);
                     }
                   }}
-                  disabled={runningVerification || !twelveDataApiKey.trim()}
+                  disabled={runningVerification}
                   data-testid="button-run-verification"
                 >
                   {runningVerification ? (
@@ -661,11 +700,12 @@ export default function Settings() {
               <div className="rounded-lg border border-border bg-background/30 p-4">
                 <h4 className="text-sm font-medium mb-2">How it works</h4>
                 <ul className="text-xs text-muted-foreground space-y-1.5">
-                  <li>• Fetches real hourly price candles from Twelve Data for each signal's symbol</li>
-                  <li>• Checks if the price hit Take Profit or Stop Loss after the signal was posted</li>
+                  <li>• Uses Yahoo Finance first (free, unlimited, no key needed)</li>
+                  <li>• Falls back to Finnhub then Twelve Data if Yahoo fails for a symbol</li>
+                  <li>• Fetches real hourly price candles for each signal's symbol and date</li>
+                  <li>• Checks if the price hit Take Profit or Stop Loss after signal was posted</li>
                   <li>• Updates each signal's outcome (WIN/LOSS) based on actual market data</li>
-                  <li>• Rate limited to 8 calls per minute to stay within free tier limits</li>
-                  <li>• Results appear on the Dashboard, Analytics, and Signals pages</li>
+                  <li>• Results appear on the Dashboard, Signals, and Active Trades pages</li>
                 </ul>
               </div>
             </CardContent>

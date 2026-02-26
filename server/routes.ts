@@ -270,18 +270,18 @@ export async function registerRoutes(
     try {
       const { exec } = await import("child_process");
       const settings = await storage.getSettings();
-      const apiKey = settings.find(s => s.key === "twelve_data_api_key")?.value;
-      if (!apiKey) {
-        return res.status(400).json({ error: "Twelve Data API key not configured. Add it in Settings > Price Verification." });
-      }
-      const env = { ...process.env, TWELVE_DATA_API_KEY: apiKey };
+      const env = { ...process.env };
+      const twelveKey = settings.find(s => s.key === "twelve_data_api_key")?.value;
+      if (twelveKey) env.TWELVE_DATA_API_KEY = twelveKey;
+      const finnhubKey = settings.find(s => s.key === "finnhub_api_key")?.value;
+      if (finnhubKey) env.FINNHUB_API_KEY = finnhubKey;
       exec("python python/verify_signals.py", { env, cwd: process.cwd() }, (error, stdout, stderr) => {
         if (error) {
           console.error("Verification error:", stderr);
         }
         console.log("Verification output:", stdout);
       });
-      res.json({ message: "Signal verification started. This runs in the background — check the Logs page for progress." });
+      res.json({ message: "Signal verification started with multi-provider fallback. Check the Logs page for progress." });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

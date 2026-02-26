@@ -2,7 +2,6 @@ import os
 import re
 import json
 import time
-import asyncio
 import urllib.request
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -10,25 +9,63 @@ from datetime import datetime, timedelta, timezone
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 
 
-def get_twelve_data_key():
-    key = os.getenv("TWELVE_DATA_API_KEY", "")
-    if key:
-        return key
+def get_setting(key):
+    env_val = os.getenv(key.upper(), "")
+    if env_val:
+        return env_val
     try:
         req = urllib.request.Request(f"{API_URL}/settings?internal=true")
         with urllib.request.urlopen(req, timeout=5) as resp:
             settings = json.loads(resp.read().decode())
             for s in settings:
-                if s.get("key") == "twelve_data_api_key" and s.get("value"):
+                if s.get("key") == key and s.get("value"):
                     return s["value"]
     except:
         pass
     return ""
 
 
-TWELVE_DATA_KEY = get_twelve_data_key()
+TWELVE_DATA_KEY = get_setting("twelve_data_api_key") or os.getenv("TWELVE_DATA_API_KEY", "")
+FINNHUB_KEY = get_setting("finnhub_api_key") or os.getenv("FINNHUB_API_KEY", "")
 
-SYMBOL_MAP = {
+YFINANCE_SYMBOL_MAP = {
+    "XAUUSD": "GC=F",
+    "GOLD": "GC=F",
+    "XAGUSD": "SI=F",
+    "SILVER": "SI=F",
+    "EURUSD": "EURUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "USDJPY": "USDJPY=X",
+    "AUDUSD": "AUDUSD=X",
+    "USDCAD": "USDCAD=X",
+    "USDCHF": "USDCHF=X",
+    "NZDUSD": "NZDUSD=X",
+    "GBPJPY": "GBPJPY=X",
+    "EURJPY": "EURJPY=X",
+    "EURGBP": "EURGBP=X",
+    "EURCHF": "EURCHF=X",
+    "AUDCAD": "AUDCAD=X",
+    "AUDJPY": "AUDJPY=X",
+    "CADCHF": "CADCHF=X",
+    "CADJPY": "CADJPY=X",
+    "CHFJPY": "CHFJPY=X",
+    "EURAUD": "EURAUD=X",
+    "EURCAD": "EURCAD=X",
+    "EURNZD": "EURNZD=X",
+    "GBPAUD": "GBPAUD=X",
+    "GBPCAD": "GBPCAD=X",
+    "GBPCHF": "GBPCHF=X",
+    "GBPNZD": "GBPNZD=X",
+    "NZDJPY": "NZDJPY=X",
+    "US30": "YM=F",
+    "NAS100": "NQ=F",
+    "SPX500": "ES=F",
+    "SP500": "ES=F",
+    "BTCUSD": "BTC-USD",
+    "ETHUSD": "ETH-USD",
+}
+
+TWELVE_DATA_SYMBOL_MAP = {
     "XAUUSD": "XAU/USD",
     "GOLD": "XAU/USD",
     "EURUSD": "EUR/USD",
@@ -49,10 +86,19 @@ SYMBOL_MAP = {
 }
 
 
+def get_yfinance_symbol(symbol):
+    upper = symbol.upper().replace("/", "")
+    if upper in YFINANCE_SYMBOL_MAP:
+        return YFINANCE_SYMBOL_MAP[upper]
+    if len(upper) == 6 and upper.isalpha():
+        return f"{upper}=X"
+    return upper
+
+
 def get_twelve_data_symbol(symbol):
     upper = symbol.upper().replace("/", "")
-    if upper in SYMBOL_MAP:
-        return SYMBOL_MAP[upper]
+    if upper in TWELVE_DATA_SYMBOL_MAP:
+        return TWELVE_DATA_SYMBOL_MAP[upper]
     if "/" in symbol:
         return symbol.upper()
     if len(upper) == 6:
@@ -60,14 +106,64 @@ def get_twelve_data_symbol(symbol):
     return upper
 
 
-def fetch_candles(symbol, start_date, end_date, interval="1h"):
+def fetch_candles_yfinance(symbol, start_date, end_date):
+    try:
+        import yfinance as yf
+        ticker_symbol = get_yfinance_symbol(symbol)
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = (end_date + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        ticker = yf.Ticker(ticker_symbol)
+        df = ticker.history(start=start_str, end=end_str, interval="1h")
+
+        if df is None or df.empty:
+            print(f"    [yfinance] No data for {ticker_symbol}")
+            return None
+
+        candles = []
+        for idx, row in df.iterrows():
+            candles.append({
+                "datetime": idx.strftime("%Y-%m-%d %H:%M"),
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+            })
+
+        candles.sort(key=lambda c: c["datetime"])
+        if len(candles) > 0:
+            print(f"    [yfinance] Got {len(candles)} candles for {ticker_symbol}")
+            return candles
+        return None
+
+    except Exception as e:
+        print(f"    [yfinance] Error: {e}")
+        return None
+
+
+twelve_data_calls = 0
+
+def fetch_candles_twelvedata(symbol, start_date, end_date):
+    global twelve_data_calls
+    if not TWELVE_DATA_KEY:
+        print(f"    [twelvedata] No API key configured, skipping")
+        return None
+
+    if twelve_data_calls >= 780:
+        print(f"    [twelvedata] Daily limit approaching ({twelve_data_calls}/800), skipping")
+        return None
+
+    if twelve_data_calls > 0 and twelve_data_calls % 7 == 0:
+        print(f"    [twelvedata] Rate limit pause (8/min)... waiting 65s")
+        time.sleep(65)
+
     td_symbol = get_twelve_data_symbol(symbol)
     start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
     end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
 
     params = urllib.parse.urlencode({
         "symbol": td_symbol,
-        "interval": interval,
+        "interval": "1h",
         "start_date": start_str,
         "end_date": end_str,
         "apikey": TWELVE_DATA_KEY,
@@ -81,24 +177,27 @@ def fetch_candles(symbol, start_date, end_date, interval="1h"):
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
 
+        twelve_data_calls += 1
+
         if data.get("status") == "error":
-            msg = data.get('message', 'Unknown error')
+            msg = data.get("message", "Unknown error")
             if "API credits" in msg or "rate" in msg.lower():
-                print(f"  Rate limited, waiting 60s...")
+                print(f"    [twelvedata] Rate limited, waiting 60s...")
                 time.sleep(60)
                 req2 = urllib.request.Request(url)
                 with urllib.request.urlopen(req2, timeout=15) as resp2:
                     data = json.loads(resp2.read().decode())
+                twelve_data_calls += 1
                 if data.get("status") == "error":
-                    print(f"  API Error after retry: {data.get('message', 'Unknown error')}")
+                    print(f"    [twelvedata] Still failing: {data.get('message')}")
                     return None
             else:
-                print(f"  API Error: {msg}")
+                print(f"    [twelvedata] API Error: {msg}")
                 return None
 
         values = data.get("values", [])
         if not values:
-            print(f"  No candle data returned for {td_symbol}")
+            print(f"    [twelvedata] No data for {td_symbol}")
             return None
 
         candles = []
@@ -112,11 +211,90 @@ def fetch_candles(symbol, start_date, end_date, interval="1h"):
             })
 
         candles.sort(key=lambda c: c["datetime"])
+        print(f"    [twelvedata] Got {len(candles)} candles for {td_symbol}")
         return candles
 
     except Exception as e:
-        print(f"  Error fetching candles: {e}")
+        print(f"    [twelvedata] Error: {e}")
         return None
+
+
+def fetch_candles_finnhub(symbol, start_date, end_date):
+    if not FINNHUB_KEY:
+        print(f"    [finnhub] No API key configured, skipping")
+        return None
+
+    upper = symbol.upper().replace("/", "")
+    if len(upper) == 6 and upper.isalpha():
+        fh_symbol = f"OANDA:{upper[:3]}_{upper[3:]}"
+    elif upper in ("XAUUSD", "GOLD"):
+        fh_symbol = "OANDA:XAU_USD"
+    elif upper in ("XAGUSD", "SILVER"):
+        fh_symbol = "OANDA:XAG_USD"
+    elif upper in ("US30",):
+        fh_symbol = "FOREXCOM:DJI"
+    elif upper in ("NAS100",):
+        fh_symbol = "FOREXCOM:NSXUSD"
+    elif upper in ("SPX500", "SP500"):
+        fh_symbol = "FOREXCOM:SPXUSD"
+    else:
+        fh_symbol = upper
+
+    from_ts = int(start_date.timestamp())
+    to_ts = int(end_date.timestamp())
+
+    params = urllib.parse.urlencode({
+        "symbol": fh_symbol,
+        "resolution": "60",
+        "from": from_ts,
+        "to": to_ts,
+        "token": FINNHUB_KEY,
+    })
+    url = f"https://finnhub.io/api/v1/forex/candle?{params}"
+
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+
+        if data.get("s") == "no_data" or not data.get("o"):
+            print(f"    [finnhub] No data for {fh_symbol}")
+            return None
+
+        candles = []
+        for i in range(len(data["o"])):
+            ts = data["t"][i]
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            candles.append({
+                "datetime": dt.strftime("%Y-%m-%d %H:%M"),
+                "open": float(data["o"][i]),
+                "high": float(data["h"][i]),
+                "low": float(data["l"][i]),
+                "close": float(data["c"][i]),
+            })
+
+        candles.sort(key=lambda c: c["datetime"])
+        print(f"    [finnhub] Got {len(candles)} candles for {fh_symbol}")
+        return candles
+
+    except Exception as e:
+        print(f"    [finnhub] Error: {e}")
+        return None
+
+
+PROVIDERS = [
+    ("yfinance", fetch_candles_yfinance),
+    ("finnhub", fetch_candles_finnhub),
+    ("twelvedata", fetch_candles_twelvedata),
+]
+
+
+def fetch_candles_with_fallback(symbol, start_date, end_date):
+    for name, fetcher in PROVIDERS:
+        candles = fetcher(symbol, start_date, end_date)
+        if candles and len(candles) > 0:
+            return candles, name
+    return None, None
 
 
 def verify_signal(signal, candles):
@@ -203,10 +381,25 @@ def log_to_api(level, message):
 
 
 def main():
-    if not TWELVE_DATA_KEY:
-        print("ERROR: TWELVE_DATA_API_KEY environment variable not set")
-        print("Get a free key at https://twelvedata.com/apikey")
+    available = []
+    try:
+        import yfinance
+        available.append("yfinance (free, no key)")
+    except ImportError:
+        print("WARNING: yfinance not installed. Run: pip install yfinance")
+
+    if FINNHUB_KEY:
+        available.append("Finnhub")
+    if TWELVE_DATA_KEY:
+        available.append("Twelve Data")
+
+    if not available:
+        print("ERROR: No price data providers available.")
+        print("Install yfinance (pip install yfinance) or set FINNHUB_API_KEY / TWELVE_DATA_API_KEY")
         return
+
+    print(f"Price providers available: {', '.join(available)}")
+    print(f"Fallback order: yfinance -> Finnhub -> Twelve Data\n")
 
     print("Fetching channel signals from database...")
     signals = get_channel_signals()
@@ -235,13 +428,13 @@ def main():
         grouped[symbol].append(sig)
 
     print(f"Unique symbols: {list(grouped.keys())}")
-    log_to_api("INFO", f"Price Verification: Starting verification of {len(signals_to_verify)} signals across {len(grouped)} symbols")
+    log_to_api("INFO", f"Price Verification: Starting verification of {len(signals_to_verify)} signals across {len(grouped)} symbols (providers: {', '.join(available)})")
 
-    api_calls = 0
     verified_count = 0
     win_count = 0
     loss_count = 0
     pending_count = 0
+    provider_stats = {}
 
     for symbol, sym_signals in grouped.items():
         print(f"\n{'='*60}")
@@ -299,23 +492,16 @@ def main():
 
             print(f"\n  Fetching candles: {fetch_start.date()} to {fetch_end.date()} ({len(batch_signals)} signals)")
 
-            if api_calls >= 780:
-                print("  WARNING: Approaching API rate limit (800/day). Stopping.")
-                log_to_api("WARNING", "Price Verification: Approaching daily API rate limit, pausing")
-                break
-
-            if api_calls > 0 and api_calls % 7 == 0:
-                print(f"  Pausing 65s to respect rate limit (8 calls/min)...")
-                time.sleep(65)
-
-            candles = fetch_candles(symbol, fetch_start, fetch_end, interval="1h")
-            api_calls += 1
+            candles, provider_used = fetch_candles_with_fallback(symbol, fetch_start, fetch_end)
 
             if not candles:
-                print(f"  No candle data available, skipping batch")
+                print(f"  All providers failed for {symbol}, skipping batch")
                 continue
 
-            print(f"  Got {len(candles)} candles")
+            if provider_used:
+                provider_stats[provider_used] = provider_stats.get(provider_used, 0) + 1
+
+            print(f"  Using data from: {provider_used}")
 
             for sig in batch_signals:
                 try:
@@ -343,7 +529,7 @@ def main():
                 print(f"  {icon} {sig['symbol']} {sig['direction']} @ {sig['entry']} -> {outcome}{change_note}")
                 print(f"     Reason: {reason}")
 
-                result = update_signal_outcome(sig["id"], outcome, f"Price verified: {reason}")
+                result = update_signal_outcome(sig["id"], outcome, f"Price verified ({provider_used}): {reason}")
                 if result:
                     verified_count += 1
                     if outcome == "WIN":
@@ -353,7 +539,7 @@ def main():
                     else:
                         pending_count += 1
 
-            time.sleep(1)
+            time.sleep(0.5)
 
     print(f"\n{'='*60}")
     print(f"VERIFICATION COMPLETE")
@@ -362,14 +548,18 @@ def main():
     print(f"  Wins:    {win_count}")
     print(f"  Losses:  {loss_count}")
     print(f"  Pending: {pending_count}")
-    print(f"API calls used: {api_calls}")
+    print(f"\nProvider usage:")
+    for prov, count in sorted(provider_stats.items(), key=lambda x: -x[1]):
+        print(f"  {prov}: {count} API calls")
+    if TWELVE_DATA_KEY:
+        print(f"  Twelve Data credits used: {twelve_data_calls}")
 
     decided = win_count + loss_count
     if decided > 0:
         real_win_rate = (win_count / decided) * 100
-        print(f"  Real Win Rate: {real_win_rate:.1f}%")
+        print(f"\n  Real Win Rate: {real_win_rate:.1f}%")
 
-    log_to_api("SUCCESS", f"Price Verification: Verified {verified_count} signals ({win_count}W/{loss_count}L/{pending_count}P). API calls: {api_calls}")
+    log_to_api("SUCCESS", f"Price Verification: Verified {verified_count} signals ({win_count}W/{loss_count}L/{pending_count}P). Providers: {dict(provider_stats)}")
 
 
 if __name__ == "__main__":
