@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import json
 import asyncio
@@ -49,19 +50,25 @@ async def send_signal_to_api(signal: dict):
 
 def extract_tps_from_lines(text):
     tps = []
-    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([\d.]+)', text, re.IGNORECASE):
-        val = float(m.group(1))
-        start = m.start()
-        before = text[max(0, start - 15):start].lower().strip()
-        if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
-            continue
-        tps.append(val)
+    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE):
+        try:
+            val = float(m.group(1))
+            start = m.start()
+            before = text[max(0, start - 15):start].lower().strip()
+            if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
+                continue
+            tps.append(val)
+        except ValueError:
+            pass
     return tps
 
 def extract_sl_from_lines(text):
-    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([\d.]+)', text, re.IGNORECASE)
+    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
     if m:
-        return float(m.group(1))
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
     return None
 
 def parse_signal(text: str):
@@ -256,4 +263,6 @@ async def main():
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     asyncio.run(main())

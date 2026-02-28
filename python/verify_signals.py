@@ -630,5 +630,9 @@ def main():
     log_to_api("SUCCESS", f"Price Verification: Verified {verified_count} signals ({win_count}W/{loss_count}L/{pending_count}P). Providers: {dict(provider_stats)}")
 
 
+import sys
+
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     main()

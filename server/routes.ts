@@ -281,6 +281,24 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/fetch-history", async (req, res) => {
+    try {
+      const channelId = req.body.channelId;
+      const { exec } = await import("child_process");
+      const cmd = channelId ? `py python/fetch_history.py --channelId "${channelId}"` : "py python/fetch_history.py";
+
+      exec(cmd, { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
+        if (error) {
+          console.error("Fetch history error:", stderr);
+        }
+        console.log("Fetch history output:", stdout);
+      });
+      res.json({ message: "History fetch started. Check the Logs page for progress." });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Python service status
   app.get("/api/status", async (req, res) => {
     res.json({
