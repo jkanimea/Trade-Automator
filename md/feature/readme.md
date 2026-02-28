@@ -13,7 +13,8 @@ Development of a feature is **never considered complete** until it has fully fun
 - **Python**: Unit or integration tests using **Pytest** for independent Python modules (e.g., Telegram listeners, order executors).
 - **End-to-End**: Full browser flow tests using **Playwright** (`tests/e2e/`) for major user interactions.
 
-*You must run the test suite with `npm run test` or `npm run test:e2e` and verify that the feature passes before moving on.*
+### Regression Testing
+*When a feature is "done," you must run the **entire** test suite (`npm run test`, `npm run test:e2e`, and `pytest`) against the codebase. This ensures the new feature works as intended **and** guarantees it hasn't broken any previously developed functionality.*
 
 ## 3. Tracking & Sign-Off
 - Once a feature and its corresponding tests are fully implemented, you must update the project's documentation (like `md/readme.md` or the active feature's markdown breakdown) to **tick off the feature** as completed (✅). 
