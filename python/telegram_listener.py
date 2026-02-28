@@ -7,6 +7,7 @@ import aiohttp
 import urllib.request
 from telethon import TelegramClient, events
 from telethon.tl.types import PeerChannel
+from notifier import send_telegram_alert
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "telegram_session")
@@ -40,6 +41,16 @@ async def send_signal_to_api(signal: dict):
                 data = await response.json()
                 print(f"Signal sent to API: {data}")
                 await log_to_api("SUCCESS", f"Signal forwarded to API: {signal['symbol']} {signal['direction']}")
+                
+                alert_msg = (
+                    f"📡 <b>New Signal Parsed</b>\n\n"
+                    f"<b>Asset:</b> {signal['symbol']}\n"
+                    f"<b>Direction:</b> {signal['direction']}\n"
+                    f"<b>Entry:</b> {signal['entry']}\n"
+                    f"<b>Stop Loss:</b> {signal['stopLoss']}\n"
+                    f"<b>Take Profits:</b> {', '.join(map(str, signal.get('takeProfits', [])))}\n"
+                )
+                asyncio.create_task(send_telegram_alert(alert_msg))
             else:
                 text = await response.text()
                 print(f"API error: {response.status} - {text}")

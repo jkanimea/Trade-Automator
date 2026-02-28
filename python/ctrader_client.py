@@ -3,6 +3,7 @@ import asyncio
 import aiohttp
 from typing import Optional
 from datetime import datetime, timedelta
+from notifier import send_telegram_alert
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 CTRADER_API_BASE = "https://api.ctrader.com"
@@ -202,13 +203,32 @@ class CTraderClient:
                         async with aiohttp.ClientSession() as api_session:
                             await api_session.post(f"{API_URL}/trades", json=trade_data)
                         
+                        asyncio.create_task(send_telegram_alert(
+                            f"⚡ <b>Trade Executed!</b>\n\n"
+                            f"<b>Symbol:</b> {signal['symbol']}\n"
+                            f"<b>Direction:</b> {signal['direction']}\n"
+                            f"<b>Lot Size:</b> {lot_size}\n"
+                            f"<b>Entry Price:</b> {signal['entry']}\n"
+                            f"<b>Ticket ID:</b> #{ticket_id}"
+                        ))
+                        
                         return result
                     else:
                         error = await response.text()
                         await self.log_to_api("ERROR", f"cTrader API: Failed to place order - {error}")
+                        asyncio.create_task(send_telegram_alert(
+                            f"❌ <b>Execution Failed</b>\n\n"
+                            f"<b>Symbol:</b> {signal['symbol']} ({signal['direction']})\n"
+                            f"<b>Reason:</b> {error}"
+                        ))
                         return None
         except Exception as e:
             await self.log_to_api("ERROR", f"cTrader API: Error placing order - {str(e)}")
+            asyncio.create_task(send_telegram_alert(
+                f"❌ <b>Execution Error</b>\n\n"
+                f"<b>Symbol:</b> {signal['symbol']} ({signal['direction']})\n"
+                f"<b>Exception:</b> {str(e)}"
+            ))
             return None
 
 async def monitor_signals():

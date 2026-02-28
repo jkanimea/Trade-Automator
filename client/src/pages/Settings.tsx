@@ -38,6 +38,8 @@ export default function Settings() {
   const [telegramApiHash, setTelegramApiHash] = useState("");
   const [telegramPhone, setTelegramPhone] = useState("");
   const [showApiHash, setShowApiHash] = useState(false);
+  const [botToken, setBotToken] = useState("");
+  const [chatId, setChatId] = useState("");
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingId, setEditingId] = useState("");
@@ -70,6 +72,8 @@ export default function Settings() {
       setTelegramApiId(settingsMap["telegram_api_id"] || "");
       setTelegramApiHash(settingsMap["telegram_api_hash"] || "");
       setTelegramPhone(settingsMap["telegram_phone"] || "");
+      setBotToken(settingsMap["execution_bot_token"] || "");
+      setChatId(settingsMap["telegram_chat_id"] || "");
       const savedProviders = settingsMap["price_providers"];
       if (savedProviders) {
         try {
@@ -616,6 +620,64 @@ export default function Settings() {
           <Card className="bg-card/50 backdrop-blur-sm border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Execution Alerts Bot
+              </CardTitle>
+              <CardDescription>Receive private Telegram alerts when your trades execute or hit TP/SL</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bot-token">Bot Token</Label>
+                  <Input
+                    id="bot-token"
+                    type="password"
+                    value={botToken}
+                    onChange={(e) => setBotToken(e.target.value)}
+                    placeholder="Enter BotFather token"
+                    className="bg-background/50 font-mono"
+                    data-testid="input-bot-token"
+                  />
+                  <p className="text-xs text-muted-foreground">Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-primary underline">@BotFather</a></p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chat-id">User Chat ID</Label>
+                  <Input
+                    id="chat-id"
+                    type="password"
+                    value={chatId}
+                    onChange={(e) => setChatId(e.target.value)}
+                    placeholder="Your personal Chat ID"
+                    className="bg-background/50 font-mono"
+                    data-testid="input-chat-id"
+                  />
+                  <p className="text-xs text-muted-foreground">Get this from <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-primary underline">@userinfobot</a></p>
+                </div>
+              </div>
+              <div className="pt-2">
+                <Button
+                  onClick={async () => {
+                    try {
+                      await saveMutation.mutateAsync({ key: "execution_bot_token", value: botToken.trim() });
+                      await saveMutation.mutateAsync({ key: "telegram_chat_id", value: chatId.trim() });
+                      toast({ title: "Bot Settings Saved", description: "Your alert configuration has been updated." });
+                    } catch (error) {
+                      toast({ title: "Error", description: "Failed to save bot settings.", variant: "destructive" });
+                    }
+                  }}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-bot-credentials"
+                >
+                  {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Alert Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur-sm border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
                 Price Verification Providers
               </CardTitle>
@@ -964,8 +1026,8 @@ export default function Settings() {
                     <button
                       key={opt.value}
                       className={`flex-1 rounded-lg border p-3 text-center transition-colors ${verificationInterval === opt.value
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-background/30 text-muted-foreground hover:border-muted-foreground/40"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background/30 text-muted-foreground hover:border-muted-foreground/40"
                         }`}
                       onClick={async () => {
                         setVerificationInterval(opt.value);
