@@ -62,7 +62,25 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: fromZodError(parsed.error).message });
       }
-      const signal = await storage.createSignal(parsed.data);
+
+      const signalData = parsed.data;
+
+      // Duplicate prevention: check if a signal for the same symbol & direction exists in the last 2 hours
+      const existingSignals = await storage.getSignals();
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+      const isDuplicate = existingSignals.some(s =>
+        s.symbol === signalData.symbol &&
+        s.direction === signalData.direction &&
+        new Date(s.timestamp) > twoHoursAgo
+      );
+
+      if (isDuplicate) {
+        console.log(`Blocked duplicate signal for ${signalData.symbol} ${signalData.direction}`);
+        return res.status(409).json({ error: "Duplicate signal detected within the last 2 hours" });
+      }
+
+      const signal = await storage.createSignal(signalData);
       broadcast({ type: "signal", action: "created", data: signal });
       res.json(signal);
     } catch (error: any) {

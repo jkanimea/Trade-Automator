@@ -8,6 +8,7 @@ import urllib.request
 from telethon import TelegramClient, events
 from telethon.tl.types import PeerChannel
 from notifier import send_telegram_alert
+from openai import AsyncOpenAI
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "telegram_session")
@@ -168,12 +169,46 @@ def parse_signal(text: str):
 
     return None
 
+async def parse_signal_with_ai(text: str, api_key: str):
+    if not api_key:
+        return None
+        
+    client = AsyncOpenAI(api_key=api_key)
+    prompt = f"""
+    You are a trading signal parser. Extract the following from the text.
+    Reply strictly in valid JSON format ONLY:
+    {{"symbol": string, "direction": "BUY" | "SELL", "entry": float, "stopLoss": float, "takeProfits": float[]}}
+    If any field is missing, return an empty JSON object {{}}.
+    Do not include markdown blocks or any other text.
+    Text: {text}
+    """
+    
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        content = response.choices[0].message.content.strip()
+        data = json.loads(content)
+        
+        if all(k in data for k in ["symbol", "direction", "entry", "stopLoss", "takeProfits"]):
+            data["symbol"] = data["symbol"].upper().replace("/", "")
+            data["direction"] = data["direction"].upper()
+            data["status"] = "PENDING"
+            return data
+    except Exception as e:
+        print(f"AI parsing failed: {e}")
+        
+    return None
+
 async def main():
     settings = get_settings_sync()
 
     api_id = os.getenv("TELEGRAM_API_ID") or settings.get("telegram_api_id")
     api_hash = os.getenv("TELEGRAM_API_HASH") or settings.get("telegram_api_hash")
     phone = os.getenv("TELEGRAM_PHONE") or settings.get("telegram_phone")
+    openai_key = os.getenv("OPENAI_API_KEY") or settings.get("openai_api_key")
 
     monitored_channels_raw = settings.get("telegram_channels", "[]")
     try:
@@ -261,6 +296,15 @@ async def main():
         await log_to_api("INFO", f"Telegram Listener: Message from \"{chat_title}\"")
 
         signal = parse_signal(text)
+        
+        if not signal and openai_key:
+            # Try AI fallback
+            print(f"Regex failed. Attempting AI parse...")
+            signal = await parse_signal_with_ai(text, openai_key)
+            if signal:
+                print(f"⚡ AI successfully parsed signal: {signal['symbol']}")
+                await log_to_api("SUCCESS", f"AI Signal Parser fallback succeeded for {signal['symbol']}")
+        
         if signal:
             signal["telegramMessageId"] = str(event.id)
             print(f"SIGNAL DETECTED: {signal['symbol']} {signal['direction']} @ {signal['entry']}")
