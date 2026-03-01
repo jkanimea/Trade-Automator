@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import json
 import asyncio
@@ -6,6 +7,8 @@ import aiohttp
 import urllib.request
 from telethon import TelegramClient, events
 from telethon.tl.types import PeerChannel
+from notifier import send_alert
+from openai import AsyncOpenAI
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 SESSION_FILE = os.path.join(os.path.dirname(__file__), "telegram_session")
@@ -39,6 +42,16 @@ async def send_signal_to_api(signal: dict):
                 data = await response.json()
                 print(f"Signal sent to API: {data}")
                 await log_to_api("SUCCESS", f"Signal forwarded to API: {signal['symbol']} {signal['direction']}")
+                
+                alert_msg = (
+                    f"📡 <b>New Signal Parsed</b>\n\n"
+                    f"<b>Asset:</b> {signal['symbol']}\n"
+                    f"<b>Direction:</b> {signal['direction']}\n"
+                    f"<b>Entry:</b> {signal['entry']}\n"
+                    f"<b>Stop Loss:</b> {signal['stopLoss']}\n"
+                    f"<b>Take Profits:</b> {', '.join(map(str, signal.get('takeProfits', [])))}\n"
+                )
+                asyncio.create_task(send_alert(alert_msg))
             else:
                 text = await response.text()
                 print(f"API error: {response.status} - {text}")
@@ -49,19 +62,25 @@ async def send_signal_to_api(signal: dict):
 
 def extract_tps_from_lines(text):
     tps = []
-    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([\d.]+)', text, re.IGNORECASE):
-        val = float(m.group(1))
-        start = m.start()
-        before = text[max(0, start - 15):start].lower().strip()
-        if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
-            continue
-        tps.append(val)
+    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE):
+        try:
+            val = float(m.group(1))
+            start = m.start()
+            before = text[max(0, start - 15):start].lower().strip()
+            if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
+                continue
+            tps.append(val)
+        except ValueError:
+            pass
     return tps
 
 def extract_sl_from_lines(text):
-    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([\d.]+)', text, re.IGNORECASE)
+    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
     if m:
-        return float(m.group(1))
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
     return None
 
 def parse_signal(text: str):
@@ -150,12 +169,46 @@ def parse_signal(text: str):
 
     return None
 
+async def parse_signal_with_ai(text: str, api_key: str):
+    if not api_key:
+        return None
+        
+    client = AsyncOpenAI(api_key=api_key)
+    prompt = f"""
+    You are a trading signal parser. Extract the following from the text.
+    Reply strictly in valid JSON format ONLY:
+    {{"symbol": string, "direction": "BUY" | "SELL", "entry": float, "stopLoss": float, "takeProfits": float[]}}
+    If any field is missing, return an empty JSON object {{}}.
+    Do not include markdown blocks or any other text.
+    Text: {text}
+    """
+    
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        content = response.choices[0].message.content.strip()
+        data = json.loads(content)
+        
+        if all(k in data for k in ["symbol", "direction", "entry", "stopLoss", "takeProfits"]):
+            data["symbol"] = data["symbol"].upper().replace("/", "")
+            data["direction"] = data["direction"].upper()
+            data["status"] = "PENDING"
+            return data
+    except Exception as e:
+        print(f"AI parsing failed: {e}")
+        
+    return None
+
 async def main():
     settings = get_settings_sync()
 
     api_id = os.getenv("TELEGRAM_API_ID") or settings.get("telegram_api_id")
     api_hash = os.getenv("TELEGRAM_API_HASH") or settings.get("telegram_api_hash")
     phone = os.getenv("TELEGRAM_PHONE") or settings.get("telegram_phone")
+    openai_key = os.getenv("OPENAI_API_KEY") or settings.get("openai_api_key")
 
     monitored_channels_raw = settings.get("telegram_channels", "[]")
     try:
@@ -243,6 +296,15 @@ async def main():
         await log_to_api("INFO", f"Telegram Listener: Message from \"{chat_title}\"")
 
         signal = parse_signal(text)
+        
+        if not signal and openai_key:
+            # Try AI fallback
+            print(f"Regex failed. Attempting AI parse...")
+            signal = await parse_signal_with_ai(text, openai_key)
+            if signal:
+                print(f"⚡ AI successfully parsed signal: {signal['symbol']}")
+                await log_to_api("SUCCESS", f"AI Signal Parser fallback succeeded for {signal['symbol']}")
+        
         if signal:
             signal["telegramMessageId"] = str(event.id)
             print(f"SIGNAL DETECTED: {signal['symbol']} {signal['direction']} @ {signal['entry']}")
@@ -256,4 +318,6 @@ async def main():
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     asyncio.run(main())

@@ -11,14 +11,14 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
   // WebSocket for real-time updates
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  
+
   wss.on("connection", (ws) => {
     console.log("WebSocket client connected");
     wsClients.add(ws);
-    
+
     ws.on("close", () => {
       wsClients.delete(ws);
     });
@@ -62,7 +62,25 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: fromZodError(parsed.error).message });
       }
-      const signal = await storage.createSignal(parsed.data);
+
+      const signalData = parsed.data;
+
+      // Duplicate prevention: check if a signal for the same symbol & direction exists in the last 2 hours
+      const existingSignals = await storage.getSignals();
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+      const isDuplicate = existingSignals.some(s =>
+        s.symbol === signalData.symbol &&
+        s.direction === signalData.direction &&
+        new Date(s.timestamp) > twoHoursAgo
+      );
+
+      if (isDuplicate) {
+        console.log(`Blocked duplicate signal for ${signalData.symbol} ${signalData.direction}`);
+        return res.status(409).json({ error: "Duplicate signal detected within the last 2 hours" });
+      }
+
+      const signal = await storage.createSignal(signalData);
       broadcast({ type: "signal", action: "created", data: signal });
       res.json(signal);
     } catch (error: any) {
@@ -86,7 +104,7 @@ export async function registerRoutes(
   // Trades routes
   app.get("/api/trades", async (req, res) => {
     try {
-      const trades = req.query.status === 'active' 
+      const trades = req.query.status === 'active'
         ? await storage.getActiveTrades()
         : await storage.getTrades();
       res.json(trades);
@@ -194,7 +212,7 @@ export async function registerRoutes(
   app.get("/api/channel-signals", async (req, res) => {
     try {
       const channelId = req.query.channelId as string | undefined;
-      const data = channelId 
+      const data = channelId
         ? await storage.getChannelSignalsByChannel(channelId)
         : await storage.getChannelSignals();
       res.json(data);
@@ -269,13 +287,31 @@ export async function registerRoutes(
   app.post("/api/verify-signals", async (req, res) => {
     try {
       const { exec } = await import("child_process");
-      exec("python python/verify_signals.py", { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
+      exec("py python/verify_signals.py", { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
         if (error) {
           console.error("Verification error:", stderr);
         }
         console.log("Verification output:", stdout);
       });
       res.json({ message: "Signal verification started with multi-provider fallback. Check the Logs page for progress." });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/fetch-history", async (req, res) => {
+    try {
+      const channelId = req.body.channelId;
+      const { exec } = await import("child_process");
+      const cmd = channelId ? `py python/fetch_history.py --channelId "${channelId}"` : "py python/fetch_history.py";
+
+      exec(cmd, { env: process.env, cwd: process.cwd() }, (error, stdout, stderr) => {
+        if (error) {
+          console.error("Fetch history error:", stderr);
+        }
+        console.log("Fetch history output:", stdout);
+      });
+      res.json({ message: "History fetch started. Check the Logs page for progress." });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

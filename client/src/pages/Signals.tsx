@@ -41,7 +41,6 @@ export default function Signals() {
 
   const allSignals: NormalizedSignal[] = useMemo(() => {
     let list = channelSignals
-      .filter((s: any) => s.outcome !== "PENDING")
       .map((s: any) => ({
         id: `ch-${s.id}`,
         channelId: s.channelId,
@@ -63,15 +62,16 @@ export default function Signals() {
   }, [channelSignals, outcomeFilter]);
 
   const channelGroups = useMemo(() => {
-    const groups: Record<string, { channelId: string; channelName: string; signals: NormalizedSignal[]; wins: number; losses: number }> = {};
+    const groups: Record<string, { channelId: string; channelName: string; signals: NormalizedSignal[]; wins: number; losses: number; pending: number }> = {};
 
     for (const sig of allSignals) {
       if (!groups[sig.channelId]) {
-        groups[sig.channelId] = { channelId: sig.channelId, channelName: sig.channelName, signals: [], wins: 0, losses: 0 };
+        groups[sig.channelId] = { channelId: sig.channelId, channelName: sig.channelName, signals: [], wins: 0, losses: 0, pending: 0 };
       }
       groups[sig.channelId].signals.push(sig);
       if (sig.outcome === "WIN") groups[sig.channelId].wins++;
       else if (sig.outcome === "LOSS") groups[sig.channelId].losses++;
+      else groups[sig.channelId].pending++;
     }
 
     for (const g of Object.values(groups)) {
@@ -86,6 +86,7 @@ export default function Signals() {
       total: allSignals.length,
       wins: allSignals.filter(s => s.outcome === "WIN").length,
       losses: allSignals.filter(s => s.outcome === "LOSS").length,
+      pending: allSignals.filter(s => s.outcome === "PENDING").length,
     };
   }, [allSignals]);
 
@@ -144,7 +145,7 @@ export default function Signals() {
               <div className="flex items-center gap-2">
                 <Filter className="h-3.5 w-3.5 text-muted-foreground" />
                 <div className="flex gap-1">
-                  {(["ALL", "WIN", "LOSS"] as const).map((f) => (
+                  {(["ALL", "WIN", "LOSS", "PENDING"] as const).map((f) => (
                     <Button
                       key={f}
                       variant={outcomeFilter === f ? "default" : "outline"}
@@ -157,6 +158,7 @@ export default function Signals() {
                       {f === "ALL" && <span className="ml-1 text-muted-foreground">({stats.total})</span>}
                       {f === "WIN" && <span className="ml-1 text-success">({stats.wins})</span>}
                       {f === "LOSS" && <span className="ml-1 text-destructive">({stats.losses})</span>}
+                      {f === "PENDING" && <span className="ml-1 text-amber-500">({stats.pending})</span>}
                     </Button>
                   ))}
                 </div>
@@ -197,6 +199,7 @@ export default function Signals() {
                           <div className="flex gap-2 text-xs font-mono">
                             <span className="text-success">{group.wins}W</span>
                             <span className="text-destructive">{group.losses}L</span>
+                            {group.pending > 0 && <span className="text-amber-500">{group.pending}P</span>}
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="w-20 bg-muted rounded-full h-1.5 overflow-hidden">
@@ -233,11 +236,10 @@ export default function Signals() {
                               data-testid={`signal-card-${signal.id}`}
                             >
                               <div className="flex items-center gap-3">
-                                <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 ${
-                                  signal.direction === 'BUY'
-                                    ? 'bg-success/10 border-success/30 text-success'
-                                    : 'bg-destructive/10 border-destructive/30 text-destructive'
-                                }`}>
+                                <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 ${signal.direction === 'BUY'
+                                  ? 'bg-success/10 border-success/30 text-success'
+                                  : 'bg-destructive/10 border-destructive/30 text-destructive'
+                                  }`}>
                                   {signal.direction === 'BUY'
                                     ? <ArrowUpRight className="h-4 w-4" />
                                     : <ArrowDownRight className="h-4 w-4" />}
@@ -273,7 +275,9 @@ export default function Signals() {
                                       {signal.outcome}
                                     </Badge>
                                     {signal.verificationNote && (
-                                      <ShieldCheck className="h-3 w-3 text-primary" title={signal.verificationNote} />
+                                      <div title={signal.verificationNote}>
+                                        <ShieldCheck className="h-3 w-3 text-primary" />
+                                      </div>
                                     )}
                                   </div>
                                   <span className="text-[10px] text-muted-foreground font-mono">

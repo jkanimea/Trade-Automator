@@ -3,23 +3,42 @@ import asyncio
 import aiohttp
 from typing import Optional
 from datetime import datetime, timedelta
+from notifier import send_alert
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 CTRADER_API_BASE = "https://api.ctrader.com"
 
 class CTraderClient:
     def __init__(self):
+        self.api_url = os.getenv("API_URL", "http://localhost:5000/api")
         self.client_id = os.getenv("CTRADER_CLIENT_ID")
         self.client_secret = os.getenv("CTRADER_CLIENT_SECRET")
         self.account_id = os.getenv("CTRADER_ACCOUNT_ID")
         self.access_token = None
         self.token_expires_at = None
+        self._settings = None
         
+    async def get_settings(self):
+        """Fetch settings from the dashboard API"""
+        if self._settings:
+            return self._settings
+            
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.api_url}/settings?internal=true") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        self._settings = {s["key"]: s["value"] for s in data if s.get("key") and s.get("value")}
+                        return self._settings
+        except Exception as e:
+            print(f"Failed to fetch settings from API: {e}")
+        return {}
+
     async def log_to_api(self, level: str, message: str, metadata: dict = None):
         """Send log to Node.js API"""
         try:
             async with aiohttp.ClientSession() as session:
-                await session.post(f"{API_URL}/logs", json={
+                await session.post(f"{self.api_url}/logs", json={
                     "level": level,
                     "message": message,
                     "metadata": metadata
@@ -29,16 +48,22 @@ class CTraderClient:
     
     async def authenticate(self):
         """OAuth2 authentication with cTrader"""
-        if not self.client_id or not self.client_secret:
-            await self.log_to_api("ERROR", "cTrader credentials not configured")
+        settings = await self.get_settings()
+        
+        # Use env vars first, then dashboard settings
+        client_id = self.client_id or settings.get("ctrader_client_id")
+        client_secret = self.client_secret or settings.get("ctrader_client_secret")
+        
+        if not client_id or not client_secret:
+            await self.log_to_api("ERROR", "cTrader credentials not configured. Set them in .env or Settings.")
             return False
         
         try:
             async with aiohttp.ClientSession() as session:
                 data = {
                     "grant_type": "client_credentials",
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret
+                    "client_id": client_id,
+                    "client_secret": client_secret
                 }
                 
                 async with session.post(f"{CTRADER_API_BASE}/oauth2/token", data=data) as response:
@@ -67,16 +92,23 @@ class CTraderClient:
         """Get account balance and information"""
         if not await self.ensure_authenticated():
             return None
-        
         try:
+            settings = await self.get_settings()
+            account_id = self.account_id or settings.get("ctrader_account_id")
+            client_id = self.client_id or settings.get("ctrader_client_id")
+            
+            if not account_id:
+                await self.log_to_api("ERROR", "cTrader Account ID not configured")
+                return None
+
             headers = {
                 "Authorization": f"Bearer {self.access_token}",
-                "Client-Id": self.client_id
+                "Client-Id": client_id
             }
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{CTRADER_API_BASE}/api/v1/accounts/{self.account_id}",
+                    f"{CTRADER_API_BASE}/api/v1/accounts/{account_id}",
                     headers=headers
                 ) as response:
                     if response.status == 200:
@@ -122,15 +154,19 @@ class CTraderClient:
         lot_size = await self.calculate_lot_size(signal)
         
         try:
+            settings = await self.get_settings()
+            account_id = self.account_id or settings.get("ctrader_account_id")
+            client_id = self.client_id or settings.get("ctrader_client_id")
+
             headers = {
                 "Authorization": f"Bearer {self.access_token}",
-                "Client-Id": self.client_id,
+                "Client-Id": client_id,
                 "Content-Type": "application/json"
             }
             
             # Prepare order payload
             order_data = {
-                "accountId": self.account_id,
+                "accountId": account_id,
                 "symbol": signal["symbol"],
                 "tradeSide": signal["direction"],
                 "volume": int(lot_size * 100000),  # Convert to micro lots
@@ -167,13 +203,32 @@ class CTraderClient:
                         async with aiohttp.ClientSession() as api_session:
                             await api_session.post(f"{API_URL}/trades", json=trade_data)
                         
+                        asyncio.create_task(send_alert(
+                            f"⚡ <b>Trade Executed!</b>\n\n"
+                            f"<b>Symbol:</b> {signal['symbol']}\n"
+                            f"<b>Direction:</b> {signal['direction']}\n"
+                            f"<b>Lot Size:</b> {lot_size}\n"
+                            f"<b>Entry Price:</b> {signal['entry']}\n"
+                            f"<b>Ticket ID:</b> #{ticket_id}"
+                        ))
+                        
                         return result
                     else:
                         error = await response.text()
                         await self.log_to_api("ERROR", f"cTrader API: Failed to place order - {error}")
+                        asyncio.create_task(send_alert(
+                            f"❌ <b>Execution Failed</b>\n\n"
+                            f"<b>Symbol:</b> {signal['symbol']} ({signal['direction']})\n"
+                            f"<b>Reason:</b> {error}"
+                        ))
                         return None
         except Exception as e:
             await self.log_to_api("ERROR", f"cTrader API: Error placing order - {str(e)}")
+            asyncio.create_task(send_alert(
+                f"❌ <b>Execution Error</b>\n\n"
+                f"<b>Symbol:</b> {signal['symbol']} ({signal['direction']})\n"
+                f"<b>Exception:</b> {str(e)}"
+            ))
             return None
 
 async def monitor_signals():
@@ -192,7 +247,7 @@ async def monitor_signals():
         try:
             # Fetch pending signals
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{API_URL}/signals") as response:
+                async with session.get(f"{client.api_url}/signals") as response:
                     if response.status == 200:
                         signals = await response.json()
                         
@@ -206,7 +261,7 @@ async def monitor_signals():
                                 if result:
                                     # Update signal status
                                     await session.patch(
-                                        f"{API_URL}/signals/{signal['id']}",
+                                        f"{client.api_url}/signals/{signal['id']}",
                                         json={
                                             "status": "ACTIVE",
                                             "ctraderTicketId": result.get("orderId", result.get("ticketId"))

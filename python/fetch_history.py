@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import json
 import asyncio
@@ -47,19 +48,25 @@ def get_settings_sync():
 
 def extract_tps_from_lines(text):
     tps = []
-    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([\d.]+)', text, re.IGNORECASE):
-        val = float(m.group(1))
-        start = m.start()
-        before = text[max(0, start - 15):start].lower().strip()
-        if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
-            continue
-        tps.append(val)
+    for m in re.finditer(r'(?<!\w)TP(?:\d[\s:@.]+|\s+[:@.]?\s*)([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE):
+        try:
+            val = float(m.group(1))
+            start = m.start()
+            before = text[max(0, start - 15):start].lower().strip()
+            if re.search(r'(?:entry\s*(?:at\s*)?|move\s*(?:sl\s*)?(?:to\s*)?|sl\s*(?:entry\s*)?(?:at\s*)?|to\s*)$', before):
+                continue
+            tps.append(val)
+        except ValueError:
+            pass
     return tps
 
 def extract_sl_from_lines(text):
-    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([\d.]+)', text, re.IGNORECASE)
+    m = re.search(r'(?:SL|stop\s*loss)\.?\s*@?\s*([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
     if m:
-        return float(m.group(1))
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
     return None
 
 
@@ -329,12 +336,26 @@ async def main():
     except json.JSONDecodeError:
         channels = []
 
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--channelId", type=str, help="Specific channel ID to fetch")
+    args, _ = parser.parse_known_args()
+
+    if args.channelId:
+        target = args.channelId.strip(' "')
+        filtered = [c for c in channels if c["id"] == target]
+        if filtered:
+            channels = filtered
+        else:
+            channels = [{"id": target, "label": target}]
+
     if not channels:
         print("No channels configured")
         return
 
-    print(f"Analyzing {len(channels)} channel(s)...")
-    log_to_api("INFO", f"History Fetch: Starting analysis of {len(channels)} channels")
+    channel_names = ", ".join([c["label"] for c in channels])
+    print(f"Analyzing {len(channels)} channel(s): {channel_names}")
+    log_to_api("INFO", f"History Fetch: Starting analysis of {len(channels)} channel(s): {channel_names}")
 
     client = TelegramClient(SESSION_FILE, api_id, api_hash)
     await client.start(phone=phone if phone else lambda: input("Phone: "))
@@ -368,4 +389,6 @@ async def main():
 
 
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     asyncio.run(main())

@@ -3,8 +3,10 @@ import re
 import json
 import time
 import urllib.request
+import aiohttp
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from notifier import send_alert
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 
@@ -52,18 +54,23 @@ TWELVEDATA_INTERVAL_MAP = {"15m": "15min", "30m": "30min", "1h": "1h"}
 FINNHUB_RESOLUTION_MAP = {"15m": "15", "30m": "30", "1h": "60"}
 
 def get_provider_key(provider_id):
+    """Gets the API key for a provider if it is configured in Settings."""
     for p in PROVIDERS_CONFIG:
         if p.get("id") == provider_id:
-            return p.get("apiKey", "")
-    env_map = {
-        "finnhub": "FINNHUB_API_KEY",
-        "twelvedata": "TWELVE_DATA_API_KEY",
-        "twelve_data": "TWELVE_DATA_API_KEY",
-    }
-    return os.getenv(env_map.get(provider_id, ""), "")
-
-TWELVE_DATA_KEY = get_provider_key("twelvedata") or get_provider_key("twelve_data") or os.getenv("TWELVE_DATA_API_KEY", "")
-FINNHUB_KEY = get_provider_key("finnhub") or os.getenv("FINNHUB_API_KEY", "")
+            # First check if the key is explicitly in the settings object from DB
+            if p.get("apiKey"):
+                return p["apiKey"]
+            
+            # Fallback to environment variables ONLY if the provider exists in the settings list
+            env_map = {
+                "finnhub": "FINNHUB_API_KEY",
+                "twelvedata": "TWELVE_DATA_API_KEY",
+                "twelve_data": "TWELVE_DATA_API_KEY",
+            }
+            env_key = env_map.get(provider_id)
+            if env_key:
+                return os.getenv(env_key, "")
+    return ""
 
 YFINANCE_SYMBOL_MAP = {
     "XAUUSD": "GC=F",
@@ -183,8 +190,8 @@ twelve_data_calls = 0
 
 def fetch_candles_twelvedata(symbol, start_date, end_date):
     global twelve_data_calls
-    if not TWELVE_DATA_KEY:
-        print(f"    [twelvedata] No API key configured, skipping")
+    api_key = get_provider_key("twelvedata") or get_provider_key("twelve_data")
+    if not api_key:
         return None
 
     if twelve_data_calls >= 780:
@@ -205,7 +212,7 @@ def fetch_candles_twelvedata(symbol, start_date, end_date):
         "interval": td_interval,
         "start_date": start_str,
         "end_date": end_str,
-        "apikey": TWELVE_DATA_KEY,
+        "apikey": api_key,
         "format": "JSON",
         "outputsize": "500",
     })
@@ -259,8 +266,8 @@ def fetch_candles_twelvedata(symbol, start_date, end_date):
 
 
 def fetch_candles_finnhub(symbol, start_date, end_date):
-    if not FINNHUB_KEY:
-        print(f"    [finnhub] No API key configured, skipping")
+    api_key = get_provider_key("finnhub")
+    if not api_key:
         return None
 
     upper = symbol.upper().replace("/", "")
@@ -288,7 +295,7 @@ def fetch_candles_finnhub(symbol, start_date, end_date):
         "resolution": fh_resolution,
         "from": from_ts,
         "to": to_ts,
-        "token": FINNHUB_KEY,
+        "token": api_key,
     })
     url = f"https://finnhub.io/api/v1/forex/candle?{params}"
 
@@ -333,19 +340,19 @@ def build_provider_chain():
     chain = []
     for p in PROVIDERS_CONFIG:
         pid = p.get("id", "")
-        requires_key = p.get("requiresKey", False)
-        api_key = p.get("apiKey", "")
-        if requires_key and not api_key:
-            print(f"  Skipping provider '{p.get('name', pid)}' — no API key configured")
+        # For yfinance, we don't need a key
+        if pid == "yfinance":
+            chain.append((pid, fetch_candles_yfinance))
             continue
+            
+        # For others, check if we have a key (either in settings or env)
+        api_key = get_provider_key(pid)
         fetcher = BUILTIN_FETCHERS.get(pid)
-        if fetcher:
+        if fetcher and api_key:
             chain.append((pid, fetcher))
-        else:
-            print(f"  Skipping provider '{p.get('name', pid)}' — no built-in fetcher for '{pid}'")
+            
     if not chain:
         chain.append(("yfinance", fetch_candles_yfinance))
-        print("  No valid providers configured, falling back to yfinance")
     return chain
 
 PROVIDERS = build_provider_chain()
@@ -446,18 +453,17 @@ def main():
     available = []
     try:
         import yfinance
-        available.append("yfinance (free, no key)")
+        available.append("yfinance")
     except ImportError:
-        print("WARNING: yfinance not installed. Run: pip install yfinance")
+        pass
 
-    if FINNHUB_KEY:
-        available.append("Finnhub")
-    if TWELVE_DATA_KEY:
-        available.append("Twelve Data")
-
+    # Only show other providers if they have a key and are in the active chain
+    for pid, _ in PROVIDERS:
+        if pid != "yfinance":
+            available.append(pid)
+            
     if not available:
-        print("ERROR: No price data providers available.")
-        print("Install yfinance (pip install yfinance) or set FINNHUB_API_KEY / TWELVE_DATA_API_KEY")
+        print("ERROR: No price data providers available (yfinance not installed and no keys found).")
         return
 
     interval_label = {"15m": "15-minute", "30m": "30-minute", "1h": "1-hour"}.get(CANDLE_INTERVAL, "1-hour")
@@ -615,7 +621,7 @@ def main():
     print(f"\nProvider usage:")
     for prov, count in sorted(provider_stats.items(), key=lambda x: -x[1]):
         print(f"  {prov}: {count} API calls")
-    if TWELVE_DATA_KEY:
+    if provider_stats.get("twelvedata") or provider_stats.get("twelve_data"):
         print(f"  Twelve Data credits used: {twelve_data_calls}")
 
     decided = win_count + loss_count
@@ -626,5 +632,9 @@ def main():
     log_to_api("SUCCESS", f"Price Verification: Verified {verified_count} signals ({win_count}W/{loss_count}L/{pending_count}P). Providers: {dict(provider_stats)}")
 
 
+import sys
+
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
     main()

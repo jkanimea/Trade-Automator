@@ -1,0 +1,57 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Web App (Debug)",
+            "preLaunchTask": "Start Database",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": [
+                "tsx",
+                "--env-file=.env",
+                "server/index.ts"
+            ],
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Telegram Listener (Debug)",
+            "preLaunchTask": "Start Database",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/python/telegram_listener.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Price Verification (Debug)",
+            "preLaunchTask": "Start Database",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/python/verify_signals.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full TradeAutomate Stack",
+            "configurations": [
+                "Web App (Debug)",
+                "Telegram Listener (Debug)"
+            ]
+        }
+    ]
+}

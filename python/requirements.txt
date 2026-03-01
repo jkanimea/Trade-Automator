@@ -1,0 +1,12 @@
+# Python Dependencies
+python-telegram-bot==20.2.0
+aiohttp==3.9.1
+yfinance==0.2.27
+finnhub-python==2.6.1
+python-dotenv==1.0.0
+psycopg2-binary==2.9.7
+requests==2.31.0
+urllib3==2.1.1
+pydantic==2.5.0
+python-dateutil==2.8.2
+pytz==2023.3

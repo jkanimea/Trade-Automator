@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getSettings, upsertSetting } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play, ShieldCheck, ExternalLink, Zap, GripVertical, ChevronUp, ChevronDown } from "lucide-react";
+import { Trash2, Plus, Loader2, CheckCircle2, Bot, Eye, EyeOff, Pencil, Check, X, BarChart3, Play, ShieldCheck, ExternalLink, Zap, GripVertical, ChevronUp, ChevronDown, Download } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -32,12 +32,16 @@ export default function Settings() {
   const [autoBreakEven, setAutoBreakEven] = useState(true);
   const [newChannel, setNewChannel] = useState("");
   const [newChannelLabel, setNewChannelLabel] = useState("");
-  const [channels, setChannels] = useState<{id: string, label: string}[]>([]);
+  const [channels, setChannels] = useState<{ id: string, label: string }[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
   const [telegramApiId, setTelegramApiId] = useState("");
   const [telegramApiHash, setTelegramApiHash] = useState("");
   const [telegramPhone, setTelegramPhone] = useState("");
   const [showApiHash, setShowApiHash] = useState(false);
+  const [botToken, setBotToken] = useState("");
+  const [chatId, setChatId] = useState("");
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
+  const [openAiKey, setOpenAiKey] = useState("");
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [editingId, setEditingId] = useState("");
@@ -70,6 +74,10 @@ export default function Settings() {
       setTelegramApiId(settingsMap["telegram_api_id"] || "");
       setTelegramApiHash(settingsMap["telegram_api_hash"] || "");
       setTelegramPhone(settingsMap["telegram_phone"] || "");
+      setBotToken(settingsMap["execution_bot_token"] || "");
+      setChatId(settingsMap["telegram_chat_id"] || "");
+      setDiscordWebhookUrl(settingsMap["discord_webhook_url"] || "");
+      setOpenAiKey(settingsMap["openai_api_key"] || "");
       const savedProviders = settingsMap["price_providers"];
       if (savedProviders) {
         try {
@@ -77,7 +85,7 @@ export default function Settings() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setProviders(parsed);
           }
-        } catch {}
+        } catch { }
       }
       setVerificationInterval(settingsMap["verification_interval"] || "1h");
       const channelList = settingsMap["telegram_channels"];
@@ -146,7 +154,7 @@ export default function Settings() {
     });
   };
 
-  const saveChannels = async (updated: {id: string, label: string}[]) => {
+  const saveChannels = async (updated: { id: string, label: string }[]) => {
     await saveMutation.mutateAsync({
       key: "telegram_channels",
       value: JSON.stringify(updated),
@@ -204,7 +212,7 @@ export default function Settings() {
     }
   };
 
-  const startEditing = (channel: {id: string, label: string}) => {
+  const startEditing = (channel: { id: string, label: string }) => {
     setEditingChannelId(channel.id);
     setEditingId(channel.id);
     setEditingLabel(channel.label);
@@ -237,13 +245,26 @@ export default function Settings() {
     }
   };
 
+  const handleFetchHistory = async (channelId: string) => {
+    try {
+      toast({ title: "Fetch Started", description: `Fetching historical messages for channel ID ${channelId}. Check the System Logs for progress.` });
+      await fetch("/api/fetch-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelId })
+      });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to start history fetch.", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="flex h-screen bg-background trading-grid overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title="System Configuration" />
         <main className="flex-1 overflow-y-auto p-6 space-y-6 max-w-4xl mx-auto w-full">
-          
+
           <Card className="bg-card/50 backdrop-blur-sm border-border">
             <CardHeader>
               <CardTitle>API Configuration</CardTitle>
@@ -253,39 +274,39 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="client-id">Client ID</Label>
-                  <Input 
-                    id="client-id" 
-                    type="password" 
-                    value="••••••••••••••••" 
-                    className="bg-background/50 font-mono" 
-                    readOnly 
+                  <Input
+                    id="client-id"
+                    type="password"
+                    value="••••••••••••••••"
+                    className="bg-background/50 font-mono"
+                    readOnly
                   />
                   <p className="text-xs text-muted-foreground">Set via CTRADER_CLIENT_ID secret</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="client-secret">Client Secret</Label>
-                  <Input 
-                    id="client-secret" 
-                    type="password" 
-                    value="••••••••••••••••" 
-                    className="bg-background/50 font-mono" 
-                    readOnly 
+                  <Input
+                    id="client-secret"
+                    type="password"
+                    value="••••••••••••••••"
+                    className="bg-background/50 font-mono"
+                    readOnly
                   />
                   <p className="text-xs text-muted-foreground">Set via CTRADER_CLIENT_SECRET secret</p>
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label htmlFor="account-id">Account ID</Label>
-                  <Input 
-                    id="account-id" 
-                    value={accountId} 
+                  <Input
+                    id="account-id"
+                    value={accountId}
                     onChange={(e) => setAccountId(e.target.value)}
                     placeholder="Enter your cTrader account ID"
-                    className="bg-background/50 font-mono" 
+                    className="bg-background/50 font-mono"
                   />
                 </div>
               </div>
               <div className="pt-2 flex items-center gap-2">
-                <Button 
+                <Button
                   onClick={handleSaveAccountId}
                   disabled={saveMutation.isPending}
                   className="w-full sm:w-auto"
@@ -296,8 +317,8 @@ export default function Settings() {
                   ) : null}
                   Save Account ID
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full sm:w-auto text-success border-success/30 hover:bg-success/10 hover:text-success"
                   onClick={handleTestConnection}
                   disabled={testingConnection}
@@ -326,9 +347,9 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Percentage of account equity to risk per trade</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Input 
-                    type="number" 
-                    value={maxRisk} 
+                  <Input
+                    type="number"
+                    value={maxRisk}
                     onChange={(e) => setMaxRisk(e.target.value)}
                     className="w-20 bg-background/50 font-mono text-right"
                     step="0.1"
@@ -345,11 +366,11 @@ export default function Settings() {
                   <Label>Daily Loss Limit</Label>
                   <p className="text-xs text-muted-foreground">Stop trading if daily loss exceeds this amount</p>
                 </div>
-                 <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">$</span>
-                  <Input 
-                    type="number" 
-                    value={dailyLossLimit} 
+                  <Input
+                    type="number"
+                    value={dailyLossLimit}
                     onChange={(e) => setDailyLossLimit(e.target.value)}
                     className="w-24 bg-background/50 font-mono text-right"
                     step="100"
@@ -364,14 +385,14 @@ export default function Settings() {
                   <Label>Auto-Break Even</Label>
                   <p className="text-xs text-muted-foreground">Move SL to entry after TP1 is hit</p>
                 </div>
-                <Switch 
-                  checked={autoBreakEven} 
+                <Switch
+                  checked={autoBreakEven}
                   onCheckedChange={setAutoBreakEven}
                   data-testid="switch-auto-break-even"
                 />
               </div>
               <div className="pt-4">
-                <Button 
+                <Button
                   onClick={handleSaveRiskSettings}
                   disabled={saveMutation.isPending}
                   data-testid="button-save-risk-settings"
@@ -473,15 +494,15 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>Monitored Channels</Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="Channel ID or @username" 
+                  <Input
+                    placeholder="Channel ID or @username"
                     className="bg-background/50 flex-1"
                     value={newChannel}
                     onChange={(e) => setNewChannel(e.target.value)}
                     data-testid="input-new-channel"
                   />
-                  <Input 
-                    placeholder="Description (e.g. Trade with Alex)" 
+                  <Input
+                    placeholder="Description (e.g. Trade with Alex)"
                     className="bg-background/50 flex-1"
                     value={newChannelLabel}
                     onChange={(e) => setNewChannelLabel(e.target.value)}
@@ -492,8 +513,8 @@ export default function Settings() {
                     }}
                     data-testid="input-new-channel-label"
                   />
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     onClick={handleAddChannel}
                     disabled={saveMutation.isPending}
                     data-testid="button-add-channel"
@@ -509,8 +530,8 @@ export default function Settings() {
                     </div>
                   ) : (
                     channels.map((channel, index) => (
-                      <div 
-                        key={index} 
+                      <div
+                        key={index}
                         className="flex items-center justify-between p-3 rounded-md border border-border bg-background/30 gap-3"
                         data-testid={`channel-item-${index}`}
                       >
@@ -561,18 +582,28 @@ export default function Settings() {
                               <span className="font-mono text-xs text-muted-foreground truncate">{channel.id}</span>
                             </div>
                             <div className="flex gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
+                                onClick={() => handleFetchHistory(channel.id)}
+                                title="Fetch History"
+                                data-testid={`button-fetch-history-${index}`}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                                 onClick={() => startEditing(channel)}
                                 data-testid={`button-edit-channel-${index}`}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 onClick={() => handleRemoveChannel(channel.id)}
                                 data-testid={`button-remove-channel-${index}`}
@@ -586,6 +617,122 @@ export default function Settings() {
                     ))
                   )}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur-sm border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                AI Signal Parsing (Fallback)
+              </CardTitle>
+              <CardDescription>If a Telegram signal has unfamiliar formatting, an AI model will attempt to read it automatically</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="openai-key">OpenAI API Key</Label>
+                  <Input
+                    id="openai-key"
+                    type="password"
+                    value={openAiKey}
+                    onChange={(e) => setOpenAiKey(e.target.value)}
+                    placeholder="sk-proj-..."
+                    className="bg-background/50 font-mono"
+                    data-testid="input-openai-key"
+                  />
+                  <p className="text-xs text-muted-foreground">Required to use the AI fallback. Get yours at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">platform.openai.com</a></p>
+                </div>
+              </div>
+              <div className="pt-2">
+                <Button
+                  onClick={async () => {
+                    try {
+                      await saveMutation.mutateAsync({ key: "openai_api_key", value: openAiKey.trim() });
+                      toast({ title: "AI Settings Saved", description: "OpenAI API key has been securely stored." });
+                    } catch (error) {
+                      toast({ title: "Error", description: "Failed to save AI settings.", variant: "destructive" });
+                    }
+                  }}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-openai-credentials"
+                >
+                  {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save AI Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur-sm border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Execution Alerts Bot
+              </CardTitle>
+              <CardDescription>Receive private Telegram alerts when your trades execute or hit TP/SL</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bot-token">Bot Token</Label>
+                  <Input
+                    id="bot-token"
+                    type="password"
+                    value={botToken}
+                    onChange={(e) => setBotToken(e.target.value)}
+                    placeholder="Enter BotFather token"
+                    className="bg-background/50 font-mono"
+                    data-testid="input-bot-token"
+                  />
+                  <p className="text-xs text-muted-foreground">Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-primary underline">@BotFather</a></p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chat-id">User Chat ID</Label>
+                  <Input
+                    id="chat-id"
+                    type="password"
+                    value={chatId}
+                    onChange={(e) => setChatId(e.target.value)}
+                    placeholder="Your personal Chat ID"
+                    className="bg-background/50 font-mono"
+                    data-testid="input-chat-id"
+                  />
+                  <p className="text-xs text-muted-foreground">Get this from <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-primary underline">@userinfobot</a></p>
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="discord-webhook">Discord Webhook (Optional)</Label>
+                  <Input
+                    id="discord-webhook"
+                    type="password"
+                    value={discordWebhookUrl}
+                    onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    className="bg-background/50 font-mono"
+                    data-testid="input-discord-webhook"
+                  />
+                  <p className="text-xs text-muted-foreground">Log trades directly into a Discord channel. <a href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener noreferrer" className="text-primary underline">Learn how</a></p>
+                </div>
+              </div>
+              <div className="pt-2">
+                <Button
+                  onClick={async () => {
+                    try {
+                      await saveMutation.mutateAsync({ key: "execution_bot_token", value: botToken.trim() });
+                      await saveMutation.mutateAsync({ key: "telegram_chat_id", value: chatId.trim() });
+                      await saveMutation.mutateAsync({ key: "discord_webhook_url", value: discordWebhookUrl.trim() });
+                      toast({ title: "Alert Settings Saved", description: "Your alert configuration has been updated." });
+                    } catch (error) {
+                      toast({ title: "Error", description: "Failed to save bot settings.", variant: "destructive" });
+                    }
+                  }}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-bot-credentials"
+                >
+                  {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Alert Settings
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -730,7 +877,7 @@ export default function Settings() {
                                 setProviders(arr);
                                 try {
                                   await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(arr) });
-                                } catch {}
+                                } catch { }
                               }}
                               data-testid={`button-move-up-${prov.id}`}
                             >
@@ -745,7 +892,7 @@ export default function Settings() {
                                 setProviders(arr);
                                 try {
                                   await saveMutation.mutateAsync({ key: "price_providers", value: JSON.stringify(arr) });
-                                } catch {}
+                                } catch { }
                               }}
                               data-testid={`button-move-down-${prov.id}`}
                             >
@@ -940,11 +1087,10 @@ export default function Settings() {
                   ].map((opt) => (
                     <button
                       key={opt.value}
-                      className={`flex-1 rounded-lg border p-3 text-center transition-colors ${
-                        verificationInterval === opt.value
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-background/30 text-muted-foreground hover:border-muted-foreground/40"
-                      }`}
+                      className={`flex-1 rounded-lg border p-3 text-center transition-colors ${verificationInterval === opt.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background/30 text-muted-foreground hover:border-muted-foreground/40"
+                        }`}
                       onClick={async () => {
                         setVerificationInterval(opt.value);
                         try {
