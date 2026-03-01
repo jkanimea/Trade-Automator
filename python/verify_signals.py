@@ -3,8 +3,10 @@ import re
 import json
 import time
 import urllib.request
+import aiohttp
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from notifier import send_alert
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
 

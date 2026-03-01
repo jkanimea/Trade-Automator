@@ -45,9 +45,44 @@ async def send_telegram_alert(message: str):
     except Exception as e:
         print(f"Exception sending Telegram alert: {e}")
 
-def send_telegram_alert_sync(message: str):
-    """Synchronous wrapper for sending a telegram alert."""
+async def send_discord_alert(message: str):
+    """
+    Sends a message to the configured Discord Webhook URL.
+    Silently fails if no URL is configured.
+    """
+    settings = get_settings_sync()
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL") or settings.get("discord_webhook_url")
+    
+    if not webhook_url:
+        return
+        
+    payload = {
+        # Strip HTML tags from Telegram format for Discord since Discord doesn't support HTML
+        "content": message.replace("<b>", "**").replace("</b>", "**").replace("<i>", "*").replace("</i>", "*")
+    }
+    
     try:
-        asyncio.run(send_telegram_alert(message))
+        async with aiohttp.ClientSession() as session:
+            async with session.post(webhook_url, json=payload) as resp:
+                if resp.status not in (200, 204):
+                    text = await resp.text()
+                    print(f"Failed to send Discord alert. Status: {resp.status}, Response: {text}")
     except Exception as e:
-        print(f"Failed to run sync telegram alert: {e}")
+        print(f"Exception sending Discord alert: {e}")
+
+async def send_alert(message: str):
+    """
+    Unified function to send alerts to all configured platforms.
+    """
+    tasks = [
+        send_telegram_alert(message),
+        send_discord_alert(message)
+    ]
+    await asyncio.gather(*tasks)
+
+def send_alert_sync(message: str):
+    """Synchronous wrapper for unified sending."""
+    try:
+        asyncio.run(send_alert(message))
+    except Exception as e:
+        print(f"Failed to run sync alert: {e}")

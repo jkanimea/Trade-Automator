@@ -7,7 +7,7 @@ import aiohttp
 import urllib.request
 from telethon import TelegramClient, events
 from telethon.tl.types import PeerChannel
-from notifier import send_telegram_alert
+from notifier import send_alert
 from openai import AsyncOpenAI
 
 API_URL = os.getenv("API_URL", "http://localhost:5000/api")
@@ -51,7 +51,7 @@ async def send_signal_to_api(signal: dict):
                     f"<b>Stop Loss:</b> {signal['stopLoss']}\n"
                     f"<b>Take Profits:</b> {', '.join(map(str, signal.get('takeProfits', [])))}\n"
                 )
-                asyncio.create_task(send_telegram_alert(alert_msg))
+                asyncio.create_task(send_alert(alert_msg))
             else:
                 text = await response.text()
                 print(f"API error: {response.status} - {text}")

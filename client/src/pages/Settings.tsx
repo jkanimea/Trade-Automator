@@ -40,6 +40,7 @@ export default function Settings() {
   const [showApiHash, setShowApiHash] = useState(false);
   const [botToken, setBotToken] = useState("");
   const [chatId, setChatId] = useState("");
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
   const [openAiKey, setOpenAiKey] = useState("");
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
@@ -75,6 +76,7 @@ export default function Settings() {
       setTelegramPhone(settingsMap["telegram_phone"] || "");
       setBotToken(settingsMap["execution_bot_token"] || "");
       setChatId(settingsMap["telegram_chat_id"] || "");
+      setDiscordWebhookUrl(settingsMap["discord_webhook_url"] || "");
       setOpenAiKey(settingsMap["openai_api_key"] || "");
       const savedProviders = settingsMap["price_providers"];
       if (savedProviders) {
@@ -699,6 +701,19 @@ export default function Settings() {
                   />
                   <p className="text-xs text-muted-foreground">Get this from <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-primary underline">@userinfobot</a></p>
                 </div>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="discord-webhook">Discord Webhook (Optional)</Label>
+                  <Input
+                    id="discord-webhook"
+                    type="password"
+                    value={discordWebhookUrl}
+                    onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    className="bg-background/50 font-mono"
+                    data-testid="input-discord-webhook"
+                  />
+                  <p className="text-xs text-muted-foreground">Log trades directly into a Discord channel. <a href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener noreferrer" className="text-primary underline">Learn how</a></p>
+                </div>
               </div>
               <div className="pt-2">
                 <Button
@@ -706,7 +721,8 @@ export default function Settings() {
                     try {
                       await saveMutation.mutateAsync({ key: "execution_bot_token", value: botToken.trim() });
                       await saveMutation.mutateAsync({ key: "telegram_chat_id", value: chatId.trim() });
-                      toast({ title: "Bot Settings Saved", description: "Your alert configuration has been updated." });
+                      await saveMutation.mutateAsync({ key: "discord_webhook_url", value: discordWebhookUrl.trim() });
+                      toast({ title: "Alert Settings Saved", description: "Your alert configuration has been updated." });
                     } catch (error) {
                       toast({ title: "Error", description: "Failed to save bot settings.", variant: "destructive" });
                     }
